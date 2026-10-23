@@ -12,7 +12,7 @@ export default function NotFound() {
           This page drifted off course
         </h1>
         <p className="page__sub">The link may be outdated. Let&apos;s get you back to planning.</p>
-        <Link href="/" className="btn btn--primary" style={{ marginTop: 8 }}>
+        <Link href="/app" className="btn btn--primary" style={{ marginTop: 8 }}>
           Back to the assistant
         </Link>
       </div>

@@ -43,7 +43,7 @@ function useReopen() {
   const router = useRouter();
   return (id: string) => {
     store.setActiveId(id);
-    router.push("/");
+    router.push("/app");
   };
 }
 

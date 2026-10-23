@@ -27,7 +27,7 @@ import { useStore } from "@/lib/store/AppStore";
 import type { MessageKey } from "@/lib/i18n";
 
 const NAV: { href: string; key: MessageKey; icon: typeof MessageCircle; count?: "saved" | "trackers" }[] = [
-  { href: "/", key: "nav.assistant", icon: Sparkles },
+  { href: "/app", key: "nav.assistant", icon: Sparkles },
   { href: "/dashboard", key: "nav.dashboard", icon: LayoutDashboard },
   { href: "/saved", key: "nav.saved", icon: Bookmark, count: "saved" },
   { href: "/tracking", key: "nav.tracking", icon: LineChart, count: "trackers" },
@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const newTrip = useCallback(() => {
     store.setActiveId(null);
-    if (pathname !== "/") router.push("/");
+    if (pathname !== "/app") router.push("/app");
     window.dispatchEvent(new Event("pyrius:new-trip"));
   }, [pathname, router, store]);
 
@@ -79,20 +79,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [newTrip]);
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) => (href === "/app" ? pathname === "/app" : pathname.startsWith(href));
   const name = settings.name || (auth.mode === "cloud" ? auth.email?.split("@")[0] : "") || "Guest traveler";
   const plan = planById(subscription.plan);
   const recent = conversations.slice(0, 14);
   const active = conversations.find((c) => c.id === activeId);
 
   const pageTitle =
-    pathname === "/" ? (active?.title ?? "Pyrius") : t((NAV.find((n) => n.href !== "/" && pathname.startsWith(n.href))?.key ?? "nav.settings") as MessageKey);
+    pathname === "/app" ? (active?.title ?? "Pyrius") : t((NAV.find((n) => n.href !== "/app" && pathname.startsWith(n.href))?.key ?? "nav.settings") as MessageKey);
 
   return (
     <div className="app" data-collapsed={collapsed} data-drawer={drawer}>
       <aside className="sidebar" aria-label="Primary">
         <div className="sidebar__top">
-          <Link href="/" className="brand" onClick={() => store.setActiveId(null)} aria-label="Pyrius home">
+          <Link href="/app" className="brand" onClick={() => store.setActiveId(null)} aria-label="Pyrius home">
             <LogoMark />
             <div className="brand__text">
               <div className="brand__name">Pyrius</div>
@@ -131,12 +131,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="recent">
             {recent.length === 0 && <p className="recent__empty">{t("nav.noRecent")}</p>}
             {recent.map((c) => (
-              <div key={c.id} className="recent__item" data-active={pathname === "/" && c.id === activeId}>
+              <div key={c.id} className="recent__item" data-active={pathname === "/app" && c.id === activeId}>
                 <button
                   className="recent__link"
                   onClick={() => {
                     store.setActiveId(c.id);
-                    if (pathname !== "/") router.push("/");
+                    if (pathname !== "/app") router.push("/app");
                   }}
                   title={c.title}
                 >
@@ -183,7 +183,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu />
           </button>
           <div className="topbar__title">{pageTitle}</div>
-          {pathname === "/" ? (
+          {pathname === "/app" ? (
             <button className="icon-btn" onClick={newTrip} aria-label={t("nav.new")}>
               <Plus />
             </button>
@@ -198,10 +198,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
 
-        {pathname !== "/" && (
+        {pathname !== "/app" && (
           <nav className="bottomnav" aria-label="Primary mobile">
             {[
-              { href: "/", key: "nav.chat" as const, icon: MessageCircle },
+              { href: "/app", key: "nav.chat" as const, icon: MessageCircle },
               { href: "/dashboard", key: "nav.dashboard" as const, icon: LayoutDashboard },
               { href: "/saved", key: "nav.saved" as const, icon: Bookmark },
               { href: "/settings", key: "nav.profile" as const, icon: User },

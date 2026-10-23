@@ -23,7 +23,7 @@ export default function TripsPage() {
             <h1 className="t-title">{t("trips.title")}</h1>
             <p className="page__sub">{t("trips.subtitle")}</p>
           </div>
-          <Link href="/" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
+          <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
             {t("nav.new")}
           </Link>
         </header>
@@ -40,7 +40,7 @@ export default function TripsPage() {
               title={t("empty.startTitle")}
               body="Every conversation with the assistant becomes a trip you can come back to."
               action={
-                <Link href="/" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
+                <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
                   {t("empty.startCta")}
                 </Link>
               }

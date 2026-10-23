@@ -45,7 +45,7 @@ export default function DashboardPage() {
             </h1>
             <p className="page__sub">{t("dash.subtitle")}</p>
           </div>
-          <Link href="/" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
+          <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
             <Plus />
             {t("nav.new")}
           </Link>
@@ -102,7 +102,7 @@ export default function DashboardPage() {
                   Set a target and follow the (simulated) price history.
                 </li>
               </ul>
-              <Link href="/" className="btn btn--primary" style={{ marginTop: 18 }} onClick={() => store.setActiveId(null)}>
+              <Link href="/app" className="btn btn--primary" style={{ marginTop: 18 }} onClick={() => store.setActiveId(null)}>
                 {t("empty.startCta")}
                 <ArrowRight />
               </Link>

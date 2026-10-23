@@ -67,7 +67,7 @@ export default function TrackingPage() {
               title="You're not tracking any prices"
               body="Open a flight, stay or car and choose “Track price” to set a target. You'll see its history here."
               action={
-                <Link href="/" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
+                <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
                   {t("empty.startCta")}
                 </Link>
               }

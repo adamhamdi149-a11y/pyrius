@@ -15,6 +15,8 @@ interface Props {
   interactive?: boolean;
   /** Displayed size multiplier, so the buffer matches what's on screen (used while docked). */
   displayScale?: number;
+  /** Largest backing-store size in device pixels (the marketing hero renders the orb larger). */
+  maxBuffer?: number;
   className?: string;
 }
 
@@ -40,7 +42,7 @@ function compile(gl: WebGLRenderingContext) {
  * The live Pyrius orb. A single full-canvas fragment shader; all motion is
  * eased in JS so state changes (idle → thinking → success) always glide.
  */
-export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale = 1, className }: Props) {
+export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale = 1, maxBuffer = 720, className }: Props) {
   const { settings, ready } = useStore();
   const canvas = useRef<HTMLCanvasElement>(null);
   // Target palette for the selected orb theme; the render loop eases toward it. Before the
@@ -115,7 +117,7 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
     const resize = () => {
       // Layout size (ignores CSS transforms) × the scale it is displayed at × DPR, in 16px steps.
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const px = Math.max(48, Math.min(720, Math.round((el.offsetWidth * scaleRef.current * dpr) / 16) * 16));
+      const px = Math.max(48, Math.min(maxBuffer, Math.round((el.offsetWidth * scaleRef.current * dpr) / 16) * 16));
       if (el.width !== px || el.height !== px) {
         el.width = px;
         el.height = px;
@@ -219,7 +221,7 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
       gl.deleteBuffer(buf);
       gl.deleteProgram(prog);
     };
-  }, [interactive]);
+  }, [interactive, maxBuffer]);
 
   return (
     <div className={cx("live-orb", className)} data-mood={mood} aria-hidden="true">

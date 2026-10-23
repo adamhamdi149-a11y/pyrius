@@ -12,6 +12,7 @@ import type { MessageKey } from "@/lib/i18n";
 import { newConversation, useStore } from "@/lib/store/AppStore";
 import type { AgentReply, Attachment, ChatMessage, Chip, ChipAction, Conversation, FlightSearchParams, OfferKind, TripPreferences } from "@/lib/types";
 import { DURATION, stagger, type OrbMood } from "@/lib/motion";
+import { takePendingPrompt } from "@/lib/pendingPrompt";
 import { cx, formatRange, uid } from "@/lib/utils";
 import { Composer, type ComposerHandle, type ComposerState } from "./Composer";
 import { EditSearchDialog } from "./EditSearchDialog";
@@ -96,6 +97,15 @@ export function Assistant() {
     };
     window.addEventListener("pyrius:new-trip", onNew);
     return () => window.removeEventListener("pyrius:new-trip", onNew);
+  }, []);
+
+  // A trip typed on the website before signing up opens here as a fresh draft.
+  useEffect(() => {
+    const prompt = takePendingPrompt();
+    if (!prompt) return;
+    if (!emptyRef.current) store.setActiveId(null);
+    requestAnimationFrame(() => composer.current?.setText(prompt));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Switching conversations: jump to the end without animation.

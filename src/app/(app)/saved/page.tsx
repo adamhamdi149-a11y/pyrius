@@ -122,7 +122,7 @@ function SavedInner() {
                   Clear filters
                 </button>
               ) : (
-                <Link href="/" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
+                <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
                   {t("empty.startCta")}
                 </Link>
               )
