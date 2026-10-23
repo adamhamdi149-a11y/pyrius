@@ -1,0 +1,510 @@
+"use client";
+import { ArrowRight, Briefcase, CalendarDays, ChevronDown, Luggage, Pencil, Plane, RotateCcw, SlidersHorizontal, Users, Zap, BadgeDollarSign } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Dialog } from "@/components/ui/Dialog";
+import { DemoBadge, EmptyState, Skeleton, useDismiss } from "@/components/ui/primitives";
+import { airportByCode } from "@/lib/data/catalog";
+import { useStore } from "@/lib/store/AppStore";
+import type { Attachment, FlightOffer, FlightSegment } from "@/lib/types";
+import { useSearch } from "@/lib/useSearch";
+import { cx, formatDuration, formatRange, formatTime, money, parseDate } from "@/lib/utils";
+import { OfferActions } from "./OfferActions";
+
+type FlightAttachment = Extract<Attachment, { type: "flights" }>;
+type Sort = "price" | "duration" | "depart";
+type Stops = "any" | "0" | "1";
+type Window = "any" | "morning" | "afternoon" | "evening";
+
+interface Filters {
+  sort: Sort;
+  stops: Stops;
+  window: Window;
+  airlines: string[]; // empty = all
+  maxPrice: number | null;
+  carryOn: boolean;
+}
+
+const WINDOWS: Record<Exclude<Window, "any">, [number, number, string]> = {
+  morning: [5, 12, "Morning · 5–12"],
+  afternoon: [12, 18, "Afternoon · 12–18"],
+  evening: [18, 24, "Evening · 18–24"],
+};
+
+const hourOf = (iso: string) => Number(iso.slice(11, 13));
+
+export function applyFlightFilters(offers: FlightOffer[], f: Filters) {
+  const list = offers.filter((o) => {
+    if (f.stops === "0" && o.outbound.stops > 0) return false;
+    if (f.stops === "1" && o.outbound.stops > 1) return false;
+    if (f.window !== "any") {
+      const [a, b] = WINDOWS[f.window];
+      const h = hourOf(o.outbound.depart);
+      if (h < a || h >= b) return false;
+    }
+    if (f.airlines.length && !f.airlines.includes(o.airline.code)) return false;
+    if (f.maxPrice !== null && o.totalPrice > f.maxPrice) return false;
+    if (f.carryOn && !o.baggage.carryOn) return false;
+    return true;
+  });
+  const total = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
+  return list.sort((a, b) =>
+    f.sort === "duration" ? total(a) - total(b) || a.totalPrice - b.totalPrice : f.sort === "depart" ? a.outbound.depart.localeCompare(b.outbound.depart) : a.totalPrice - b.totalPrice,
+  );
+}
+
+function dayShift(seg: FlightSegment) {
+  const d = Math.round((parseDate(seg.arrive.slice(0, 10)).getTime() - parseDate(seg.depart.slice(0, 10)).getTime()) / 86400000);
+  return d > 0 ? `+${d}` : d < 0 ? `${d}` : "";
+}
+
+function Leg({ seg, label }: { seg: FlightSegment; label: string }) {
+  const shift = dayShift(seg);
+  return (
+    <div className="leg">
+      <div className="leg__pt">
+        <b className="num">{formatTime(seg.depart)}</b>
+        <span>{seg.from}</span>
+      </div>
+      <div className="leg__mid" aria-label={`${label}: ${formatDuration(seg.durationMin)}, ${seg.stops ? `${seg.stops} stop${seg.stops > 1 ? "s" : ""}` : "nonstop"}`}>
+        <span className="leg__dur num">{formatDuration(seg.durationMin)}</span>
+        <div className="leg__line" aria-hidden="true">
+          {seg.stopCodes.map((s) => (
+            <i key={s} />
+          ))}
+          <Plane />
+        </div>
+        <span className={cx("leg__stops", seg.stops === 0 && "leg__stops--direct")}>
+          {seg.stops === 0 ? (
+            "Nonstop"
+          ) : (
+            <>
+              <b>{`${seg.stops} stop${seg.stops > 1 ? "s" : ""}`}</b> · {seg.stopCodes.join(", ")}
+            </>
+          )}
+        </span>
+      </div>
+      <div className="leg__pt leg__pt--end">
+        <b className="num">
+          {formatTime(seg.arrive)}
+          {shift && <sup>{shift}</sup>}
+        </b>
+        <span>{seg.to}</span>
+      </div>
+    </div>
+  );
+}
+
+export function FlightCard({ offer, tags, conversationId, onSaved, locale }: { offer: FlightOffer; tags: ("cheapest" | "fastest")[]; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string }) {
+  const highlight = tags.includes("cheapest");
+  return (
+    <article className={cx("fcard", highlight && "fcard--best")} aria-label={`${offer.airline.name}, ${money(offer.totalPrice, offer.currency, locale)}`}>
+      <div className="fcard__main">
+        <div className="fcard__airline">
+          <span className="airline-logo" style={{ ["--c" as string]: offer.airline.color }} aria-hidden="true">
+            {offer.airline.code}
+          </span>
+          <div className="fcard__airline-text">
+            <div className="fcard__name">{offer.airline.name}</div>
+            <div className="t-meta">{offer.cabin}</div>
+          </div>
+        </div>
+        <div className="fcard__legs">
+          <Leg seg={offer.outbound} label="Outbound" />
+          {offer.inbound && <Leg seg={offer.inbound} label="Return" />}
+        </div>
+        <div className="fcard__price">
+          {tags.length > 0 && (
+            <div className="fcard__tags">
+              {tags.includes("cheapest") && (
+                <span className="badge badge--accent">
+                  <BadgeDollarSign />
+                  Lowest in these results
+                </span>
+              )}
+              {tags.includes("fastest") && (
+                <span className="badge">
+                  <Zap />
+                  Shortest trip
+                </span>
+              )}
+            </div>
+          )}
+          <div className="price num">{money(offer.totalPrice, offer.currency, locale)}</div>
+          <div className="t-meta num">
+            {offer.travelers > 1 ? `${money(offer.pricePerTraveler, offer.currency, locale)} / traveler · ` : ""}
+            {offer.inbound ? "round trip" : "one way"}
+          </div>
+        </div>
+      </div>
+      <div className="fcard__foot">
+        <div className="fcard__facts">
+          <span className={cx("fact", !offer.baggage.carryOn && "fact--off")}>
+            <Briefcase />
+            {offer.baggage.carryOn ? "Carry-on included" : "No carry-on"}
+          </span>
+          <span className={cx("fact", !offer.baggage.checked && "fact--off")}>
+            <Luggage />
+            {offer.baggage.checked ? `${offer.baggage.checked} checked bag${offer.baggage.checked > 1 ? "s" : ""}` : "No checked bag"}
+          </span>
+          <span className="fact fact--muted">{offer.outbound.flightNumber}</span>
+        </div>
+        <OfferActions offer={{ kind: "flight", offer }} conversationId={conversationId} onSaved={onSaved} />
+      </div>
+    </article>
+  );
+}
+
+function FlightSkeleton() {
+  return (
+    <div className="results__list" aria-busy="true" aria-label="Loading flights">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="fcard" style={{ padding: 20 }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+            <Skeleton w={36} h={36} r={10} />
+            <div style={{ flex: 1, display: "grid", gap: 8 }}>
+              <Skeleton w="40%" h={12} />
+              <Skeleton w="70%" h={10} />
+            </div>
+            <Skeleton w={90} h={26} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Pop({ label, active, children, align }: { label: string; active?: boolean; children: React.ReactNode; align?: "end" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button className={cx("filter-btn", active && "filter-btn--on")} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {label}
+        <ChevronDown />
+      </button>
+      {open && <div className={cx("popover filter-pop", align === "end" && "filter-pop--end")}>{children}</div>}
+    </div>
+  );
+}
+
+function FilterSections({ f, set, offers, locale, only }: { f: Filters; set: (p: Partial<Filters>) => void; offers: FlightOffer[]; locale: string; only?: "stops" | "window" | "airlines" | "price" }) {
+  const airlines = useMemo(() => {
+    const m = new Map<string, { name: string; count: number; low: number }>();
+    offers.forEach((o) => {
+      const e = m.get(o.airline.code) ?? { name: o.airline.name, count: 0, low: Infinity };
+      e.count++;
+      e.low = Math.min(e.low, o.totalPrice);
+      m.set(o.airline.code, e);
+    });
+    return [...m.entries()].sort((a, b) => a[1].low - b[1].low);
+  }, [offers]);
+  const prices = offers.map((o) => o.totalPrice);
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  const cur = offers[0]?.currency ?? "CAD";
+
+  return (
+    <>
+      {(!only || only === "stops") && (
+        <fieldset className="fset">
+          <legend className="fset__title">Stops</legend>
+          <div className="fset__chips">
+            {(
+              [
+                ["any", "Any number"],
+                ["0", "Nonstop only"],
+                ["1", "1 stop or fewer"],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} className="chip" aria-pressed={f.stops === k} onClick={() => set({ stops: k })}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {(!only || only === "window") && (
+        <fieldset className="fset">
+          <legend className="fset__title">Departure time</legend>
+          <div className="fset__chips">
+            {(["any", "morning", "afternoon", "evening"] as const).map((w) => (
+              <button key={w} className="chip" aria-pressed={f.window === w} onClick={() => set({ window: w })}>
+                {w === "any" ? "Any time" : WINDOWS[w][2]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {(!only || only === "airlines") && (
+        <fieldset className="fset">
+          <legend className="fset__title">Airlines</legend>
+          {airlines.map(([code, a]) => (
+            <label key={code} className="check">
+              <input
+                type="checkbox"
+                checked={f.airlines.length === 0 || f.airlines.includes(code)}
+                onChange={(e) => {
+                  const all = airlines.map(([c]) => c);
+                  const current = f.airlines.length ? f.airlines : all;
+                  const next = e.target.checked ? [...current, code] : current.filter((c) => c !== code);
+                  set({ airlines: next.length === all.length ? [] : next });
+                }}
+              />
+              <span style={{ flex: 1 }}>{a.name}</span>
+              <span className="t-meta num">from {money(a.low, cur, locale)}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {(!only || only === "price") && (
+        <fieldset className="fset">
+          <legend className="fset__title">
+            Maximum total price <span className="num" style={{ color: "var(--text)" }}>{money(f.maxPrice ?? hi, cur, locale)}</span>
+          </legend>
+          <input
+            className="range"
+            type="range"
+            min={lo}
+            max={hi}
+            step={10}
+            value={f.maxPrice ?? hi}
+            onChange={(e) => set({ maxPrice: e.target.valueAsNumber >= hi ? null : e.target.valueAsNumber })}
+            aria-label="Maximum total price"
+          />
+          <div className="range-ends num">
+            <span>{money(lo, cur, locale)}</span>
+            <span>{money(hi, cur, locale)}</span>
+          </div>
+          <label className="check" style={{ marginTop: 6 }}>
+            <input type="checkbox" checked={f.carryOn} onChange={(e) => set({ carryOn: e.target.checked })} />
+            Carry-on bag included
+          </label>
+        </fieldset>
+      )}
+    </>
+  );
+}
+
+export function SearchSummary({
+  from,
+  to,
+  dates,
+  people,
+  currency,
+  onEdit,
+  kind = "Flights",
+}: {
+  from?: string;
+  to: string;
+  dates: string;
+  people: string;
+  currency: string;
+  onEdit?: () => void;
+  kind?: string;
+}) {
+  return (
+    <div className="summary">
+      <div className="summary__route">
+        <span className="t-eyebrow">{kind}</span>
+        <div className="summary__places">
+          {from && (
+            <>
+              <span>{from}</span>
+              <ArrowRight />
+            </>
+          )}
+          <span>{to}</span>
+        </div>
+      </div>
+      <div className="summary__meta">
+        <span>
+          <CalendarDays />
+          {dates}
+        </span>
+        <span>
+          <Users />
+          {people}
+        </span>
+        <span className="num">{currency}</span>
+        <DemoBadge />
+      </div>
+      {onEdit && (
+        <button className="btn btn--ghost btn--sm summary__edit" onClick={onEdit} aria-label="Edit search">
+          <Pencil />
+          <span>Edit search</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function FlightResults({ attachment, conversationId, onSaved, onEdit }: { attachment: FlightAttachment; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; onEdit?: () => void }) {
+  const { settings } = useStore();
+  const res = useSearch<{ offers: FlightOffer[]; source: string }>("flights", attachment.params);
+  const init: Filters = {
+    sort: attachment.filters?.sort ?? "price",
+    stops: attachment.filters?.nonstopOnly ? "0" : "any",
+    window: "any",
+    airlines: [],
+    maxPrice: null,
+    carryOn: Boolean(attachment.filters?.carryOnOnly),
+  };
+  const [f, setF] = useState<Filters>(init);
+  const [sheet, setSheet] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const set = (p: Partial<Filters>) => setF((x) => ({ ...x, ...p }));
+  const p = attachment.params;
+  const locale = settings.locale;
+  const o = airportByCode(p.originCode);
+  const d = airportByCode(p.destinationCode);
+  const travelers = p.adults + p.children;
+
+  const offers = res.status === "ok" ? res.data.offers : [];
+  const list = useMemo(() => applyFlightFilters([...offers], f), [offers, f]);
+  const cheapestId = useMemo(() => offers.reduce<FlightOffer | null>((a, b) => (!a || b.totalPrice < a.totalPrice ? b : a), null)?.id, [offers]);
+  const fastestId = useMemo(
+    () => offers.reduce<FlightOffer | null>((a, b) => (!a || b.outbound.durationMin + (b.inbound?.durationMin ?? 0) < a.outbound.durationMin + (a.inbound?.durationMin ?? 0) ? b : a), null)?.id,
+    [offers],
+  );
+  const activeCount = [f.stops !== "any", f.window !== "any", f.airlines.length > 0, f.maxPrice !== null, f.carryOn].filter(Boolean).length;
+  const visible = showAll ? list : list.slice(0, 6);
+  const budgetFit = attachment.budget ? offers.filter((x) => x.totalPrice <= attachment.budget!).length : null;
+
+  return (
+    <section className="results" aria-label="Flight results">
+      <SearchSummary
+        from={o ? `${o.city} ${o.code}` : p.originCode}
+        to={d ? `${d.city} ${d.code}` : p.destinationCode}
+        dates={formatRange(p.departDate, p.returnDate, locale)}
+        people={`${travelers} traveler${travelers > 1 ? "s" : ""}`}
+        currency={p.currency}
+        onEdit={onEdit}
+      />
+
+      {res.status === "loading" && <FlightSkeleton />}
+      {res.status === "error" && (
+        <div className="results__error">
+          <span>{res.error}</span>
+          <button className="btn btn--secondary btn--sm" onClick={res.retry}>
+            <RotateCcw />
+            Try again
+          </button>
+        </div>
+      )}
+      {res.status === "ok" && (
+        <>
+          <div className="toolbar">
+            <div className="seg" role="group" aria-label="Sort by">
+              {(
+                [
+                  ["price", "Lowest price"],
+                  ["duration", "Shortest"],
+                  ["depart", "Earliest"],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} aria-pressed={f.sort === k} onClick={() => set({ sort: k })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="toolbar__desk toolbar__pops" role="group" aria-label="Filters">
+              <Pop label={f.stops === "any" ? "Stops" : f.stops === "0" ? "Nonstop" : "≤ 1 stop"} active={f.stops !== "any"}>
+                <FilterSections f={f} set={set} offers={offers} locale={locale} only="stops" />
+              </Pop>
+              <Pop label={f.window === "any" ? "Departure" : WINDOWS[f.window][2].split(" ·")[0]} active={f.window !== "any"}>
+                <FilterSections f={f} set={set} offers={offers} locale={locale} only="window" />
+              </Pop>
+              <Pop label={f.airlines.length ? `Airlines · ${f.airlines.length}` : "Airlines"} active={f.airlines.length > 0}>
+                <FilterSections f={f} set={set} offers={offers} locale={locale} only="airlines" />
+              </Pop>
+              <Pop label={f.maxPrice !== null ? `≤ ${money(f.maxPrice, p.currency, locale)}` : "Price & bags"} active={f.maxPrice !== null || f.carryOn} align="end">
+                <FilterSections f={f} set={set} offers={offers} locale={locale} only="price" />
+              </Pop>
+            </div>
+            <button className={cx("filter-btn toolbar__mob", activeCount > 0 && "filter-btn--on")} onClick={() => setSheet(true)}>
+              <SlidersHorizontal />
+              {activeCount ? `Filters · ${activeCount}` : "Filters"}
+            </button>
+          </div>
+
+          <div className="results__meta">
+            <span className="num">
+              <b>{list.length}</b> of {offers.length} flights
+            </span>
+            {budgetFit !== null && (
+              <span>
+                {budgetFit > 0
+                  ? `${budgetFit} within your ${money(attachment.budget!, p.currency, locale)} budget`
+                  : `None within ${money(attachment.budget!, p.currency, locale)} in this demo data`}
+                {budgetFit > 0 && f.maxPrice === null && (
+                  <button className="link-btn" onClick={() => set({ maxPrice: attachment.budget! })}>
+                    Show only those
+                  </button>
+                )}
+              </span>
+            )}
+            {activeCount > 0 && (
+              <button className="link-btn results__reset" onClick={() => setF({ ...init, stops: "any", carryOn: false, sort: f.sort })}>
+                <RotateCcw />
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {list.length === 0 ? (
+            <EmptyState
+              icon={<SlidersHorizontal />}
+              title="No flights match these filters"
+              body="Try allowing a stop, widening the departure window or raising the price limit."
+              action={
+                <button className="btn btn--secondary" onClick={() => setF({ ...init, stops: "any", carryOn: false })}>
+                  Reset filters
+                </button>
+              }
+            />
+          ) : (
+            <div className="results__list">
+              {visible.map((offer) => (
+                <FlightCard
+                  key={offer.id}
+                  offer={offer}
+                  locale={locale}
+                  conversationId={conversationId}
+                  onSaved={onSaved}
+                  tags={[...(offer.id === cheapestId ? (["cheapest"] as const) : []), ...(offer.id === fastestId ? (["fastest"] as const) : [])]}
+                />
+              ))}
+            </div>
+          )}
+          {list.length > 6 && (
+            <button className="btn btn--ghost results__more" onClick={() => setShowAll((s) => !s)}>
+              {showAll ? "Show fewer" : `Show ${list.length - 6} more flights`}
+            </button>
+          )}
+          <p className="results__fine">
+            Demonstration offers generated for testing — not live fares or seat availability. Pyrius doesn&apos;t sell tickets; you&apos;ll compare and book with the airline or a booking site.
+          </p>
+
+          <Dialog
+            open={sheet}
+            onClose={() => setSheet(false)}
+            title="Filters"
+            sheet
+            footer={
+              <>
+                <button className="btn btn--ghost" onClick={() => setF({ ...init, stops: "any", carryOn: false, sort: f.sort })}>
+                  Reset
+                </button>
+                <button className="btn btn--primary" onClick={() => setSheet(false)}>
+                  Show {list.length} flights
+                </button>
+              </>
+            }
+          >
+            <FilterSections f={f} set={set} offers={offers} locale={locale} />
+          </Dialog>
+        </>
+      )}
+    </section>
+  );
+}

@@ -1,0 +1,137 @@
+/* ==========================================================================
+   Pyrius design tokens
+   Breakpoints (used in media queries): sm 640px · md 900px · lg 1200px
+   ========================================================================== */
+
+:root {
+  /* Dark is the default theme */
+  --bg: #090a0d;
+  --bg-2: #101116;
+  --sidebar: #0c0d11;
+  --surface: #16171d;
+  --surface-2: #1c1d24;
+  --surface-3: #22232b;
+  --border: #262730;
+  --border-soft: #1d1e25;
+  --border-strong: #353642;
+  --text: #f5f5f7;
+  --text-2: #9899a6;
+  --text-3: #7a7b88;
+  --accent: #ff7628;
+  --accent-hi: #ff9a57;
+  --accent-ink: #1a0b03;
+  --accent-soft: rgba(255, 118, 40, 0.12);
+  --accent-line: rgba(255, 118, 40, 0.38);
+  --success: #42c98a;
+  --success-soft: rgba(66, 201, 138, 0.12);
+  --warning: #f2bc65;
+  --warning-soft: rgba(242, 188, 101, 0.12);
+  --error: #f16c72;
+  --error-soft: rgba(241, 108, 114, 0.12);
+  --overlay: rgba(4, 5, 7, 0.66);
+  --scrim-grad: linear-gradient(180deg, rgba(9, 10, 13, 0) 0%, var(--bg) 46%);
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --shadow-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 24px 64px -16px rgba(0, 0, 0, 0.75);
+  --glow: 0 0 0 1px var(--accent-line), 0 0 0 5px rgba(255, 118, 40, 0.08), 0 10px 40px -10px rgba(255, 118, 40, 0.35);
+
+  --orb-1: #fff1e2;
+  --orb-2: #ffb47c;
+  --orb-3: #ff7628;
+  --orb-4: #c2410c;
+  --orb-5: #3d1305;
+  --orb-halo: rgba(255, 118, 40, 0.34);
+
+  /* Type */
+  --font-sans: var(--font-geist), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.625rem;
+  --fs-2xl: 2.125rem;
+  --fs-3xl: clamp(1.875rem, 1.2rem + 2.2vw, 2.75rem);
+  --lh-tight: 1.12;
+  --lh-snug: 1.3;
+  --lh-body: 1.6;
+  --tracking-tight: -0.028em;
+  --tracking-snug: -0.014em;
+
+  /* Space */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* Radii */
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --d-1: 120ms;
+  --d-2: 200ms;
+  --d-3: 320ms;
+  --d-4: 520ms;
+
+  /* Layout */
+  --sidebar-w: 264px;
+  --sidebar-w-collapsed: 72px;
+  --topbar-h: 56px;
+  --bottomnav-h: 64px;
+  --content-w: 1120px;
+  --chat-w: 920px;
+  --text-w: 720px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* Light theme: warm paper, ink text, a slightly deeper orange for contrast. */
+:root[data-theme="light"] {
+  --bg: #f6f5f2;
+  --bg-2: #fbfaf8;
+  --sidebar: #efede9;
+  --surface: #ffffff;
+  --surface-2: #f7f6f3;
+  --surface-3: #efede9;
+  --border: #e4e1db;
+  --border-soft: #ecebe6;
+  --border-strong: #d2cec6;
+  --text: #17171b;
+  --text-2: #5f5e68;
+  --text-3: #7b7a84;
+  --accent: #ea5f12;
+  --accent-hi: #ff7a2f;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(234, 95, 18, 0.09);
+  --accent-line: rgba(234, 95, 18, 0.4);
+  --success: #188a56;
+  --success-soft: rgba(24, 138, 86, 0.1);
+  --warning: #a86d12;
+  --warning-soft: rgba(168, 109, 18, 0.1);
+  --error: #c93a43;
+  --error-soft: rgba(201, 58, 67, 0.09);
+  --overlay: rgba(30, 26, 20, 0.32);
+  --scrim-grad: linear-gradient(180deg, rgba(246, 245, 242, 0) 0%, var(--bg) 46%);
+
+  --shadow-1: 0 1px 2px rgba(40, 30, 20, 0.06);
+  --shadow-2: 0 1px 2px rgba(40, 30, 20, 0.05), 0 8px 24px -10px rgba(40, 30, 20, 0.16);
+  --shadow-3: 0 2px 6px rgba(40, 30, 20, 0.06), 0 28px 64px -18px rgba(40, 30, 20, 0.28);
+  --glow: 0 0 0 1px var(--accent-line), 0 0 0 5px rgba(234, 95, 18, 0.07), 0 10px 36px -12px rgba(234, 95, 18, 0.3);
+
+  --orb-halo: rgba(255, 118, 40, 0.26);
+  --orb-5: #7a2a08;
+}
