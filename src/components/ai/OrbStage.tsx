@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { DURATION, type OrbMood } from "@/lib/motion";
 import { LiveOrb } from "./LiveOrb";
 
@@ -29,10 +29,13 @@ export function OrbStage({ mood, pulseKey, anchor, anchorKey }: { mood: OrbMood;
   }, [anchorKey]);
 
   // Follow the anchor every frame; cheap (two rect reads) and robust to any layout shift.
+  // The first placement happens synchronously so the orb never waits on a frame to appear.
+  const place = useRef<() => void>(() => {});
+  useLayoutEffect(() => place.current());
   useEffect(() => {
     let raf = 0;
     let lastT = "";
-    const tick = () => {
+    const measure = () => {
       const s = stage.current;
       const a = anchor.current;
       const host = s?.parentElement;
@@ -53,10 +56,19 @@ export function OrbStage({ mood, pulseKey, anchor, anchorKey }: { mood: OrbMood;
           if (!ready) setReady(true);
         }
       }
+    };
+    const tick = () => {
+      measure();
       raf = requestAnimationFrame(tick);
     };
+    place.current = measure;
+    measure();
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
   }, [anchor, ready]);
 
   return (

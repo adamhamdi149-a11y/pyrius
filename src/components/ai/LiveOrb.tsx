@@ -169,8 +169,9 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
     };
     el.addEventListener("webglcontextlost", onLost);
 
-    if (reduced) draw();
-    else raf = requestAnimationFrame(frame);
+    // Draw one frame right away so the orb is visible before the animation loop starts.
+    draw();
+    if (!reduced) raf = requestAnimationFrame(frame);
 
     return () => {
       cancelAnimationFrame(raf);
