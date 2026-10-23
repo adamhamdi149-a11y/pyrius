@@ -138,7 +138,7 @@ export function TripCard({ trip, index, onDelete }: { trip: TripSummary; index: 
         {trip.image ? (
           <SmartImage src={trip.image.replace("w=1200", "w=700")} alt={trip.dest ?? ""} ratio="16 / 9" />
         ) : (
-          <div style={{ aspectRatio: "16 / 9", background: "radial-gradient(circle at 30% 30%, rgba(255,118,40,.25), transparent 60%), var(--surface-2)" }} />
+          <div style={{ aspectRatio: "16 / 9", background: "radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--accent) 25%, transparent), transparent 60%), var(--surface-2)" }} />
         )}
         <div className="tripcard__place">
           <b>{trip.dest ?? trip.title}</b>

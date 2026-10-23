@@ -12,7 +12,7 @@
   margin-bottom: 16px;
   border-radius: var(--r-xl);
   border: 1px solid var(--border);
-  background: radial-gradient(80% 140% at 100% 0%, rgba(255, 118, 40, 0.22), transparent 60%), var(--surface);
+  background: radial-gradient(80% 140% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), var(--surface);
   animation: rise var(--d-4) var(--ease);
 }
 
@@ -52,7 +52,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ffb27e;
+  color: var(--accent-hi);
 }
 
 .spot__eyebrow::before {
@@ -61,7 +61,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 10px rgba(255, 118, 40, 0.9);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 90%, transparent);
 }
 
 .spot__title {
@@ -1001,8 +1001,8 @@ a.metric:hover {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffe2c4, #ff7628 45%, #8f2d06);
-  box-shadow: 0 0 12px rgba(255, 118, 40, 0.5);
+  background: radial-gradient(circle at 35% 30%, var(--orb-1), var(--orb-3) 45%, var(--orb-4));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .theme-prev--dark { background: #090a0d; }
@@ -1037,7 +1037,7 @@ a.metric:hover {
 
 .plan--featured {
   border-color: var(--accent-line);
-  background: radial-gradient(120% 70% at 50% 0%, rgba(255, 118, 40, 0.12), transparent 60%), var(--surface);
+  background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%), var(--surface);
   box-shadow: var(--glow);
 }
 
@@ -1160,7 +1160,7 @@ a.metric:hover {
   padding: 32px;
   border-radius: var(--r-xl);
   border: 1px solid var(--border-soft);
-  background: radial-gradient(70% 120% at 0% 50%, rgba(255, 118, 40, 0.08), transparent 60%), var(--bg-2);
+  background: radial-gradient(70% 120% at 0% 50%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%), var(--bg-2);
   margin-top: 20px;
 }
 
@@ -1348,5 +1348,187 @@ a.metric:hover {
   .srow-set__control {
     flex-basis: 100%;
     justify-content: flex-start;
+  }
+}
+
+/* ---------- Orb colour selector ---------- */
+
+.orbpick {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 0 18px 24px;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+
+.orbpick[data-ready="false"] {
+  opacity: 0;
+}
+
+.orbpick__stage {
+  width: 210px;
+  height: 210px;
+  margin: -26px 0 -34px;
+  pointer-events: none;
+}
+
+.orbpick__ctrl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.orbpick__arrow {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: var(--shadow-1);
+  transition: border-color var(--dur-base) var(--ease-standard), color var(--dur-base) var(--ease-standard), background-color var(--dur-base) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-standard);
+}
+
+.orbpick__arrow svg {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+
+.orbpick__arrow:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.orbpick__arrow:first-child:hover svg {
+  transform: translateX(-2px);
+}
+
+.orbpick__arrow:last-child:hover svg {
+  transform: translateX(2px);
+}
+
+.orbpick__arrow:active {
+  transform: scale(0.92);
+  transition-duration: var(--dur-instant);
+}
+
+.orbpick__arrow:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.orbpick__pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 220px;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--accent-line);
+  background: radial-gradient(120% 170% at 50% 0%, var(--accent-soft), transparent 70%), var(--bg-2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 6%, transparent), 0 10px 32px -14px color-mix(in srgb, var(--accent) 60%, transparent);
+  overflow: hidden;
+}
+
+/* A thin sheen along the top edge, like the orb's glass */
+.orbpick__pill::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-hi) 70%, transparent), transparent);
+}
+
+.orbpick__swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--orb-1), var(--orb-3) 50%, var(--orb-4));
+  box-shadow: 0 0 10px 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.orbpick__name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--accent-hi) 30%, var(--text));
+  animation: orbpick-in-next var(--dur-slow) var(--ease-out-expo);
+}
+
+.orbpick__name[data-dir="-1"] {
+  animation-name: orbpick-in-prev;
+}
+
+@keyframes orbpick-in-next {
+  from { opacity: 0; transform: translateX(14px); filter: blur(4px); }
+}
+
+@keyframes orbpick-in-prev {
+  from { opacity: 0; transform: translateX(-14px); filter: blur(4px); }
+}
+
+.orbpick__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.orbpick__dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.orbpick__dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--border-strong);
+  transition: width var(--dur-slow) var(--ease-out-expo), background-color var(--dur-base) var(--ease-standard);
+}
+
+.orbpick__dots i[data-on="true"] {
+  width: 18px;
+  background: var(--accent);
+}
+
+.orbpick__mood {
+  animation: m-fade-up var(--dur-slow) var(--ease-out-expo);
+}
+
+@media (max-width: 640px) {
+  .orbpick__stage {
+    width: 180px;
+    height: 180px;
+  }
+
+  .orbpick__ctrl {
+    gap: 8px;
+  }
+
+  .orbpick__pill {
+    min-width: 0;
+    flex: 1;
+    padding: 0 14px;
+  }
+
+  .orbpick__arrow {
+    width: 44px;
+    height: 44px;
   }
 }

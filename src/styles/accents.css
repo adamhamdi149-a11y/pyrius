@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Orb colour themes → application accents
+   The selected orb theme sets data-accent on <html>. Accent colours are
+   registered with @property so the browser interpolates them: switching
+   theme glides every button, focus ring and glow instead of jumping.
+   Success, warning and error colours are intentionally not themed.
+   ========================================================================== */
+
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #ff7628; }
+@property --accent-hi { syntax: "<color>"; inherits: true; initial-value: #ff9a57; }
+@property --accent-ink { syntax: "<color>"; inherits: true; initial-value: #1a0b03; }
+@property --orb-1 { syntax: "<color>"; inherits: true; initial-value: #fff1e2; }
+@property --orb-2 { syntax: "<color>"; inherits: true; initial-value: #ffb47c; }
+@property --orb-3 { syntax: "<color>"; inherits: true; initial-value: #ff7628; }
+@property --orb-4 { syntax: "<color>"; inherits: true; initial-value: #c2410c; }
+@property --orb-5 { syntax: "<color>"; inherits: true; initial-value: #3d1305; }
+
+:root {
+  transition:
+    --accent var(--dur-slower) var(--ease-standard),
+    --accent-hi var(--dur-slower) var(--ease-standard),
+    --accent-ink var(--dur-slower) var(--ease-standard),
+    --orb-1 900ms var(--ease-standard),
+    --orb-2 900ms var(--ease-standard),
+    --orb-3 900ms var(--ease-standard),
+    --orb-4 900ms var(--ease-standard),
+    --orb-5 900ms var(--ease-standard);
+}
+
+/* ---------- Blazing Ember (default; base values live in tokens.css) ---------- */
+
+/* ---------- Arctic Pulse: electric sapphire / cobalt ---------- */
+
+:root[data-accent="arctic"] {
+  --accent: #3d8bff;
+  --accent-hi: #7db4ff;
+  --accent-ink: #04112a;
+  --orb-1: #e4f1ff;
+  --orb-2: #7db4ff;
+  --orb-3: #2f7bff;
+  --orb-4: #0b3fb8;
+  --orb-5: #04123d;
+}
+
+:root[data-theme="light"][data-accent="arctic"] {
+  --accent: #1f68e0;
+  --accent-hi: #4d8dff;
+  --accent-ink: #ffffff;
+  --orb-5: #0a2a7a;
+}
+
+/* ---------- Violet Nova: violet / ultraviolet ---------- */
+
+:root[data-accent="violet"] {
+  --accent: #9d6bff;
+  --accent-hi: #c3a0ff;
+  --accent-ink: #13062e;
+  --orb-1: #f3eaff;
+  --orb-2: #c3a0ff;
+  --orb-3: #8f5bff;
+  --orb-4: #5520c4;
+  --orb-5: #1d0645;
+}
+
+:root[data-theme="light"][data-accent="violet"] {
+  --accent: #7a3ae8;
+  --accent-hi: #9d6bff;
+  --accent-ink: #ffffff;
+  --orb-5: #3a1080;
+}

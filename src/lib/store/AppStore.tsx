@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { translate, type MessageKey } from "@/lib/i18n";
 import { canAddTracker, canSave, DEFAULT_SUBSCRIPTION, planById } from "@/lib/plans";
+import { DEFAULT_ORB_THEME, orbThemeById } from "@/lib/orbThemes";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { simulateCheck, trackerFromOffer } from "@/lib/tracking/simulator";
 import type { AnyOffer, Conversation, PlanId, PriceTracker, SavedOffer, Subscription, UserSettings } from "@/lib/types";
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   currency: "CAD",
   locale: "en",
   theme: "dark",
+  orbTheme: DEFAULT_ORB_THEME,
   defaultAdults: 1,
   defaultChildren: 0,
   travelStyle: { nonstop: false, carryOnOnly: false, flexibleDates: true },
@@ -59,6 +61,15 @@ interface Store {
 
 const Ctx = createContext<Store | null>(null);
 
+/** Orb theme → data-accent on <html>; accents.css maps it to the accent tokens. Mirrored for the pre-paint script. */
+function applyAccent(id: UserSettings["orbTheme"]) {
+  const theme = orbThemeById(id);
+  document.documentElement.dataset.accent = theme.id;
+  try {
+    localStorage.setItem("pyrius:accent", theme.id);
+  } catch {}
+}
+
 function applyTheme(theme: UserSettings["theme"]) {
   const root = document.documentElement;
   const resolved = theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : theme;
@@ -102,6 +113,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setTrackers(data.trackers ?? []);
     setSubscription(data.subscription ?? DEFAULT_SUBSCRIPTION);
     applyTheme(s.theme);
+    applyAccent(s.orbTheme);
     setReady(true);
   }, []);
 
@@ -255,6 +267,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     (patch: Partial<UserSettings>) => {
       const next = { ...settings, ...patch };
       if (patch.theme) applyTheme(patch.theme);
+      if (patch.orbTheme) applyAccent(patch.orbTheme);
       setSettings(next);
       persist((r) => r.putSettings(next));
     },

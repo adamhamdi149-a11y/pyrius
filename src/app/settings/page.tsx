@@ -3,6 +3,7 @@ import { Bell, Check, CreditCard, Database, LogIn, LogOut, Minus, Monitor, Moon,
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { OrbThemePicker } from "@/components/settings/OrbThemePicker";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { initials, Switch } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
@@ -208,7 +209,7 @@ function Appearance() {
     { id: "system", label: "System", icon: Monitor },
   ] as const;
   return (
-    <Section title="Appearance" desc="Dark is the default. Your choice is remembered on this device.">
+    <Section title="Appearance" desc="Dark and Blazing Ember are the defaults. Your choices are saved with your settings.">
       <div className="sgroup">
         <div className="theme-cards" role="radiogroup" aria-label="Theme">
           {opts.map(({ id, label, icon: Icon }) => (
@@ -232,6 +233,15 @@ function Appearance() {
             </button>
           ))}
         </div>
+      </div>
+      <div className="sgroup">
+        <div className="srow-set">
+          <div className="srow-set__text">
+            <div className="srow-set__label">Animation · Orb color</div>
+            <div className="srow-set__hint">Choose the light that powers Pyrius. Buttons, focus rings and highlights across the app follow it.</div>
+          </div>
+        </div>
+        <OrbThemePicker />
       </div>
     </Section>
   );

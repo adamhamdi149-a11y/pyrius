@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ease, finePointer, ORB_STATES, prefersReducedMotion, type OrbMood } from "@/lib/motion";
+import { orbThemeById, paletteArray } from "@/lib/orbThemes";
+import { useStore } from "@/lib/store/AppStore";
 import { cx } from "@/lib/utils";
 import { Orb } from "./Orb";
 import { FRAG, VERT } from "./orbShader";
@@ -39,7 +41,14 @@ function compile(gl: WebGLRenderingContext) {
  * eased in JS so state changes (idle → thinking → success) always glide.
  */
 export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale = 1, className }: Props) {
+  const { settings, ready } = useStore();
   const canvas = useRef<HTMLCanvasElement>(null);
+  // Target palette for the selected orb theme; the render loop eases toward it. Before the
+  // store has loaded, start from the accent the pre-paint script restored, so reloads don't flash.
+  const paletteTarget = useRef(
+    paletteArray(orbThemeById(typeof document !== "undefined" ? document.documentElement.dataset.accent : settings.orbTheme).palette),
+  );
+  const themeChanged = useRef<(flare: boolean) => void>(() => {});
   const [fallback, setFallback] = useState(false);
   const moodRef = useRef(mood);
   const scaleRef = useRef(displayScale);
@@ -56,6 +65,15 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
   }, [pulseKey]);
 
   useEffect(() => redraw.current(), [mood, displayScale]);
+
+  const lastTheme = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    paletteTarget.current = paletteArray(orbThemeById(settings.orbTheme).palette);
+    // Flare only on a real change, not when the saved theme is first restored.
+    themeChanged.current(Boolean(lastTheme.current && lastTheme.current !== settings.orbTheme));
+    lastTheme.current = settings.orbTheme;
+  }, [settings.orbTheme, ready]);
 
   useEffect(() => {
     const el = canvas.current;
@@ -81,7 +99,9 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
     const u = (n: string) => gl.getUniformLocation(prog, n);
-    const U = { res: u("uRes"), time: u("uTime"), energy: u("uEnergy"), glow: u("uGlow"), listen: u("uListen"), pulse: u("uPulse"), dim: u("uDim"), light: u("uLight"), theme: u("uLightTheme") };
+    const U = { res: u("uRes"), time: u("uTime"), energy: u("uEnergy"), glow: u("uGlow"), listen: u("uListen"), pulse: u("uPulse"), dim: u("uDim"), light: u("uLight"), theme: u("uLightTheme"), pal: u("uPal") };
+    // Current palette, starting at the selected theme so the first frame is already correct.
+    const pal = Float32Array.from(paletteTarget.current);
 
     const reduced = prefersReducedMotion();
     const start = ORB_STATES[moodRef.current];
@@ -114,6 +134,7 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
       gl.uniform1f(U.dim, cur.dim);
       gl.uniform2f(U.light, cur.lx, cur.ly);
       gl.uniform1f(U.theme, document.documentElement.dataset.theme === "light" ? 1 : 0);
+      gl.uniform3fv(U.pal, pal);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -132,8 +153,21 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
       cur.lx = ease(cur.lx, pointer.x, 3.5, dt);
       cur.ly = ease(cur.ly, pointer.y, 3.5, dt);
       pulse.current = Math.max(0, pulse.current - dt * 0.9);
+      // Theme colours glide (~1 s) while shape, motion and the clock carry on untouched.
+      const palTarget = paletteTarget.current;
+      for (let i = 0; i < pal.length; i++) pal[i] = ease(pal[i], palTarget[i], 2.8, dt);
       draw();
       if (visible) raf = requestAnimationFrame(frame);
+    };
+
+    // A theme change brings a short inner flare; with reduced motion the colours switch in one still frame.
+    themeChanged.current = (flare) => {
+      if (reduced) {
+        pal.set(paletteTarget.current);
+        draw();
+      } else if (flare) {
+        pulse.current = Math.max(pulse.current, 0.55);
+      }
     };
 
     // Reduced motion: no animation loop, just a fresh still frame on each state change.
@@ -179,7 +213,11 @@ export function LiveOrb({ mood, pulseKey = 0, interactive = true, displayScale =
       window.removeEventListener("pointermove", onPointer);
       el.removeEventListener("webglcontextlost", onLost);
       redraw.current = () => {};
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      themeChanged.current = () => {};
+      // Free GPU resources but keep the context: React may re-run this effect on the same
+      // canvas (StrictMode, remounts), and a deliberately lost context can't be reused.
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
     };
   }, [interactive]);
 

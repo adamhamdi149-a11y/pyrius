@@ -321,7 +321,7 @@
 
 .fcard--best {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: radial-gradient(90% 120% at 100% 0%, rgba(255, 118, 40, 0.07), transparent 50%), var(--surface);
+  background: radial-gradient(90% 120% at 100% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 50%), var(--surface);
 }
 
 .fcard__main {

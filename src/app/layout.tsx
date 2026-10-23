@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AppStoreProvider } from "@/lib/store/AppStore";
 import "@/styles/tokens.css";
 import "@/styles/motion.css";
+import "@/styles/accents.css";
 import "@/styles/base.css";
 import "@/styles/shell.css";
 import "@/styles/chat.css";
@@ -32,8 +33,8 @@ export const viewport: Viewport = {
   ],
 };
 
-// Applies the saved theme before paint to avoid a flash. Dark is the default.
-const themeScript = `(function(){try{var t=localStorage.getItem("pyrius:theme")||"dark";var r=t==="system"?(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"):t;document.documentElement.dataset.theme=r;document.documentElement.style.colorScheme=r;}catch(e){document.documentElement.dataset.theme="dark";}})();`;
+// Applies the saved theme and orb accent before paint to avoid a flash. Dark + Blazing Ember are the defaults.
+const themeScript = `(function(){try{var t=localStorage.getItem("pyrius:theme")||"dark";var r=t==="system"?(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"):t;document.documentElement.dataset.theme=r;document.documentElement.style.colorScheme=r;var a=localStorage.getItem("pyrius:accent");if(a==="arctic"||a==="violet"||a==="ember")document.documentElement.dataset.accent=a;}catch(e){document.documentElement.dataset.theme="dark";}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

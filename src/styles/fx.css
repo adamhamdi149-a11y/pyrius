@@ -20,7 +20,7 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--dur-slower) var(--ease-standard);
-  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), rgba(255, 118, 40, 0.07), rgba(255, 118, 40, 0.02) 40%, transparent 70%);
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), color-mix(in srgb, var(--accent) 7%, transparent), color-mix(in srgb, var(--accent) 2%, transparent) 40%, transparent 70%);
 }
 
 .pointer-light[data-on="true"] {
@@ -28,7 +28,7 @@
 }
 
 :root[data-theme="light"] .pointer-light {
-  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), rgba(255, 118, 40, 0.08), transparent 65%);
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%);
 }
 
 /* ---------- Card glow: local spotlight + border light that follow the pointer ---------- */
@@ -49,12 +49,12 @@
 }
 
 [data-glow]::after {
-  background: radial-gradient(360px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 140, 70, 0.065), transparent 45%);
+  background: radial-gradient(360px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--accent-hi) 6.5%, transparent), transparent 45%);
 }
 
 [data-glow]::before {
   padding: 1px;
-  background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 160, 100, 0.55), transparent 65%);
+  background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--accent-hi) 55%, transparent), transparent 65%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);

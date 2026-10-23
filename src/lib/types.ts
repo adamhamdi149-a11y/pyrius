@@ -1,3 +1,5 @@
+import type { OrbThemeId } from "@/lib/orbThemes";
+
 // Shared domain types. UI, AI logic, providers and persistence all speak these shapes.
 
 export type Currency = "CAD" | "USD" | "EUR";
@@ -289,6 +291,8 @@ export interface UserSettings {
   currency: Currency;
   locale: Locale;
   theme: ThemePref;
+  /** Orb colour theme; also drives the app accent colours. */
+  orbTheme: OrbThemeId;
   defaultAdults: number;
   defaultChildren: number;
   travelStyle: { nonstop: boolean; carryOnOnly: boolean; flexibleDates: boolean };
