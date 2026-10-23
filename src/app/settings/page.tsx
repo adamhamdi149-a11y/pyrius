@@ -336,7 +336,7 @@ function Subscription() {
           const isCurrent = p.id === subscription.plan;
           const featured = p.id === "plus";
           return (
-            <div key={p.id} className={cx("plan", featured && "plan--featured")}>
+            <div key={p.id} data-glow className={cx("plan", featured && "plan--featured")}>
               <div className="plan__name">
                 {p.name}
                 {featured && !isCurrent && <span className="badge badge--accent">Recommended</span>}

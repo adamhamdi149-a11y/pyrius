@@ -1,19 +1,20 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 
-type Status<T> = { status: "loading" } | { status: "ok"; data: T } | { status: "error"; error: string };
+/** `ms` is the measured request time, shown to the user as part of the data-source line. */
+type Status<T> = { status: "loading" } | { status: "ok"; data: T; ms?: number } | { status: "error"; error: string };
 
 // Results are deterministic per search, so a session cache avoids refetching on re-render or remount.
-const cache = new Map<string, unknown>();
+const cache = new Map<string, { data: unknown; ms: number }>();
 
 export function useSearch<T>(kind: "flights" | "hotels" | "cars" | "businesses", params: object) {
   const key = `${kind}:${JSON.stringify(params)}`;
-  const [state, setState] = useState<Status<T>>(() => (cache.has(key) ? { status: "ok", data: cache.get(key) as T } : { status: "loading" }));
+  const [state, setState] = useState<Status<T>>(() => (cache.has(key) ? { status: "ok", data: cache.get(key)!.data as T, ms: cache.get(key)!.ms } : { status: "loading" }));
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (cache.has(key)) {
-      setState({ status: "ok", data: cache.get(key) as T });
+      setState({ status: "ok", data: cache.get(key)!.data as T, ms: cache.get(key)!.ms });
       return;
     }
     let alive = true;
@@ -26,11 +27,11 @@ export function useSearch<T>(kind: "flights" | "hotels" | "cars" | "businesses",
         return body as T;
       })
       .then(async (data) => {
-        // Keep the skeleton up briefly so results don't flash in jarringly.
-        const wait = Math.max(0, 450 - (Date.now() - started));
-        await new Promise((res) => setTimeout(res, wait));
-        cache.set(key, data);
-        if (alive) setState({ status: "ok", data });
+        const ms = Date.now() - started;
+        // Keep the loading state up briefly so results don't flash in jarringly.
+        await new Promise((res) => setTimeout(res, Math.max(0, 650 - ms)));
+        cache.set(key, { data, ms });
+        if (alive) setState({ status: "ok", data, ms });
       })
       .catch((err: Error) => alive && setState({ status: "error", error: err.message }));
     return () => {

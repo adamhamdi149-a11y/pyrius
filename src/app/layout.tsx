@@ -4,11 +4,13 @@ import { AppShell } from "@/components/shell/AppShell";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AppStoreProvider } from "@/lib/store/AppStore";
 import "@/styles/tokens.css";
+import "@/styles/motion.css";
 import "@/styles/base.css";
 import "@/styles/shell.css";
 import "@/styles/chat.css";
 import "@/styles/results.css";
 import "@/styles/pages.css";
+import "@/styles/fx.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });

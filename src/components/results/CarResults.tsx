@@ -8,14 +8,17 @@ import type { Attachment, CarOffer, LocalBusiness, LocalBusinessResult } from "@
 import { useSearch } from "@/lib/useSearch";
 import { formatRange, money } from "@/lib/utils";
 import { SearchSummary } from "./FlightResults";
+import { Price } from "@/components/ui/Price";
+import { stagger } from "@/lib/motion";
 import { OfferActions } from "./OfferActions";
+import { SearchProgress, SourceLine } from "./SearchProgress";
 
 type CarAttachment = Extract<Attachment, { type: "cars" }>;
 type BizAttachment = Extract<Attachment, { type: "businesses" }>;
 
-export function CarCard({ c, conversationId, onSaved, locale }: { c: CarOffer; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string }) {
+export function CarCard({ c, conversationId, onSaved, locale, index = 0 }: { c: CarOffer; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number }) {
   return (
-    <article className="ccard">
+    <article className="ccard" data-glow style={stagger(index)}>
       <SmartImage src={c.image} alt={`${c.category} car — representative photo`} className="ccard__img" ratio="16 / 10" sizes="(max-width: 900px) 100vw, 440px" />
       <div className="ccard__body">
         <div className="ccard__head">
@@ -55,7 +58,7 @@ export function CarCard({ c, conversationId, onSaved, locale }: { c: CarOffer; c
           ))}
         </ul>
         <div className="ccard__price">
-          <span className="price price--sm num">{money(c.totalPrice, c.currency, locale)}</span>
+          <Price amount={c.totalPrice} currency={c.currency} locale={locale} />
           <span className="t-meta num">
             est. total · {c.days} day{c.days > 1 ? "s" : ""}
           </span>
@@ -81,11 +84,13 @@ export function CarResults({ attachment, conversationId, onSaved }: { attachment
     <section className="results" aria-label="Rental car results">
       <SearchSummary kind="Rental cars" to={`${d?.city ?? p.destinationCode} airport`} dates={formatRange(p.pickUp, p.dropOff, locale)} people="Pick-up & return" currency={p.currency} />
       {res.status === "loading" && (
-        <div className="hgrid">
-          {[0, 1].map((i) => (
-            <Skeleton key={i} h={300} r={16} />
-          ))}
-        </div>
+        <SearchProgress what="rental cars">
+          <div className="hgrid">
+            {[0, 1].map((i) => (
+              <Skeleton key={i} h={300} r={16} />
+            ))}
+          </div>
+        </SearchProgress>
       )}
       {res.status === "error" && (
         <div className="results__error">
@@ -98,6 +103,7 @@ export function CarResults({ attachment, conversationId, onSaved }: { attachment
       )}
       {res.status === "ok" && (
         <>
+          <SourceLine count={offers.length} noun="vehicles" ms={res.ms} />
           <div className="toolbar toolbar--wrap">
             <div className="fset__chips" role="group" aria-label="Vehicle category">
               <button className="chip" aria-pressed={cat === "all"} onClick={() => setCat("all")}>
@@ -116,9 +122,9 @@ export function CarResults({ attachment, conversationId, onSaved }: { attachment
           {list.length === 0 ? (
             <EmptyState icon={<Car />} title="No cars in this category" action={<button className="btn btn--secondary" onClick={() => setCat("all")}>Show all</button>} />
           ) : (
-            <div className="hgrid">
-              {list.map((c) => (
-                <CarCard key={c.id} c={c} locale={locale} conversationId={conversationId} onSaved={onSaved} />
+            <div className="hgrid m-stagger">
+              {list.map((c, i) => (
+                <CarCard key={c.id} c={c} index={i} locale={locale} conversationId={conversationId} onSaved={onSaved} />
               ))}
             </div>
           )}

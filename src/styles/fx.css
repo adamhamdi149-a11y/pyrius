@@ -1,0 +1,168 @@
+/* ==========================================================================
+   Live orb, orb stage, pointer light, card glow, parallax
+   ========================================================================== */
+
+.main__body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Ambient pointer light (desktop only, behind content) ---------- */
+
+.pointer-light {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-slower) var(--ease-standard);
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), rgba(255, 118, 40, 0.07), rgba(255, 118, 40, 0.02) 40%, transparent 70%);
+}
+
+.pointer-light[data-on="true"] {
+  opacity: 1;
+}
+
+:root[data-theme="light"] .pointer-light {
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), rgba(255, 118, 40, 0.08), transparent 65%);
+}
+
+/* ---------- Card glow: local spotlight + border light that follow the pointer ---------- */
+
+[data-glow] {
+  position: relative;
+}
+
+[data-glow]::after,
+[data-glow]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-standard);
+}
+
+[data-glow]::after {
+  background: radial-gradient(360px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 140, 70, 0.065), transparent 45%);
+}
+
+[data-glow]::before {
+  padding: 1px;
+  background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 160, 100, 0.55), transparent 65%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-glow]:hover::after,
+  [data-glow]:hover::before {
+    opacity: 1;
+  }
+}
+
+/* ---------- Live orb ---------- */
+
+.live-orb {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.live-orb__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.live-orb__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.live-orb__fallback .orb {
+  --orb: 56%;
+  width: 56%;
+  height: 56%;
+}
+
+/* ---------- Orb stage: one orb that flies between anchors ---------- */
+
+.orb-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 9;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-standard);
+}
+
+.orb-stage[data-ready="true"] {
+  opacity: 1;
+}
+
+.orb-stage[data-flying="true"] {
+  transition: transform var(--dur-orb-flight) var(--ease-emphasized), opacity var(--dur-slow) var(--ease-standard);
+}
+
+.orb-stage__inner {
+  width: 100%;
+  height: 100%;
+  transition: transform 900ms var(--ease-out-expo);
+}
+
+/* Gentle parallax only while the orb is the welcome centrepiece */
+.orb-stage[data-anchor="welcome"] .orb-stage__inner {
+  transform: translate3d(calc(var(--pxn, 0) * 9px), calc(var(--pyn, 0) * 7px), 0);
+}
+
+/* Anchors reserve the orb's space in the layout */
+.orb-anchor {
+  flex: none;
+  border-radius: 50%;
+}
+
+/* ---------- Background parallax ---------- */
+
+.ambient svg {
+  transition: transform 1.2s var(--ease-out-expo);
+  transform: translate3d(calc(var(--pxn, 0) * -14px), calc(var(--pyn, 0) * -8px), 0);
+}
+
+.spot__img img {
+  transition: transform 1.4s var(--ease-out-expo), opacity var(--d-4) var(--ease);
+  transform: scale(1.06) translate3d(calc(var(--pxn, 0) * -6px), calc(var(--pyn, 0) * -4px), 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-stage__inner,
+  .ambient svg,
+  .spot__img img {
+    transform: none !important;
+  }
+}
+
+/* Standalone live orb in panels (dashboard empty state, 404) */
+.panel-orb {
+  width: 180px;
+  height: 180px;
+  flex: none;
+  margin: -24px -20px;
+}
+
+.panel-orb--lg {
+  width: 260px;
+  height: 260px;
+  margin: -40px auto -30px;
+}

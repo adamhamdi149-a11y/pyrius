@@ -8,7 +8,10 @@ import { useStore } from "@/lib/store/AppStore";
 import type { Attachment, FlightOffer, FlightSegment } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
 import { cx, formatDuration, formatRange, formatTime, money, parseDate } from "@/lib/utils";
+import { Price } from "@/components/ui/Price";
+import { stagger } from "@/lib/motion";
 import { OfferActions } from "./OfferActions";
+import { SearchProgress, SourceLine } from "./SearchProgress";
 
 type FlightAttachment = Extract<Attachment, { type: "flights" }>;
 type Sort = "price" | "duration" | "depart";
@@ -94,10 +97,10 @@ function Leg({ seg, label }: { seg: FlightSegment; label: string }) {
   );
 }
 
-export function FlightCard({ offer, tags, conversationId, onSaved, locale }: { offer: FlightOffer; tags: ("cheapest" | "fastest")[]; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string }) {
+export function FlightCard({ offer, tags, conversationId, onSaved, locale, index = 0 }: { offer: FlightOffer; tags: ("cheapest" | "fastest")[]; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number }) {
   const highlight = tags.includes("cheapest");
   return (
-    <article className={cx("fcard", highlight && "fcard--best")} aria-label={`${offer.airline.name}, ${money(offer.totalPrice, offer.currency, locale)}`}>
+    <article className={cx("fcard", highlight && "fcard--best")} data-glow style={stagger(index)} aria-label={`${offer.airline.name}, ${money(offer.totalPrice, offer.currency, locale)}`}>
       <div className="fcard__main">
         <div className="fcard__airline">
           <span className="airline-logo" style={{ ["--c" as string]: offer.airline.color }} aria-hidden="true">
@@ -129,7 +132,7 @@ export function FlightCard({ offer, tags, conversationId, onSaved, locale }: { o
               )}
             </div>
           )}
-          <div className="price num">{money(offer.totalPrice, offer.currency, locale)}</div>
+          <Price amount={offer.totalPrice} currency={offer.currency} locale={locale} size="lg" />
           <div className="t-meta num">
             {offer.travelers > 1 ? `${money(offer.pricePerTraveler, offer.currency, locale)} / traveler · ` : ""}
             {offer.inbound ? "round trip" : "one way"}
@@ -156,7 +159,7 @@ export function FlightCard({ offer, tags, conversationId, onSaved, locale }: { o
 
 function FlightSkeleton() {
   return (
-    <div className="results__list" aria-busy="true" aria-label="Loading flights">
+    <div className="results__list" aria-busy="true">
       {[0, 1, 2].map((i) => (
         <div key={i} className="fcard" style={{ padding: 20 }}>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -381,7 +384,11 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
         onEdit={onEdit}
       />
 
-      {res.status === "loading" && <FlightSkeleton />}
+      {res.status === "loading" && (
+        <SearchProgress what={`flights ${p.originCode} → ${p.destinationCode}`}>
+          <FlightSkeleton />
+        </SearchProgress>
+      )}
       {res.status === "error" && (
         <div className="results__error">
           <span>{res.error}</span>
@@ -427,6 +434,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
             </button>
           </div>
 
+          <SourceLine count={offers.length} noun="offers" ms={res.ms} />
           <div className="results__meta">
             <span className="num">
               <b>{list.length}</b> of {offers.length} flights
@@ -463,10 +471,11 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
               }
             />
           ) : (
-            <div className="results__list">
-              {visible.map((offer) => (
+            <div className="results__list m-stagger">
+              {visible.map((offer, i) => (
                 <FlightCard
                   key={offer.id}
+                  index={i}
                   offer={offer}
                   locale={locale}
                   conversationId={conversationId}

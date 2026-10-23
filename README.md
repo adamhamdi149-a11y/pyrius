@@ -21,7 +21,10 @@ Copy `.env.example` to `.env.local` to connect real services.
 | --- | --- |
 | Design tokens & styles | `src/styles/` (`tokens.css` = colors, type, spacing, radii, shadows, motion; dark default + designed light theme) |
 | App shell, sidebar, mobile nav | `src/components/shell/AppShell.tsx` |
-| AI orb, composer, conversation | `src/components/ai/Orb.tsx`, `src/components/chat/*` |
+| Live AI orb (WebGL shader, CSS fallback) | `src/components/ai/LiveOrb.tsx`, `orbShader.ts`, `OrbStage.tsx` (one orb that flies welcome ↔ composer) |
+| Motion system | `src/styles/motion.css` (durations, easings, keyframes, stagger) + `src/lib/motion.ts` (orb states, helpers) |
+| Pointer light, card glow, parallax | `src/components/fx/PointerFX.tsx` + `src/styles/fx.css` (desktop fine pointers only) |
+| Composer, conversation, trip brief | `src/components/chat/*` |
 | Results (flights, hotels, cars, local businesses) | `src/components/results/*` |
 | Saved offers, trackers, trips | `src/components/offers/*`, `src/components/tracking/*` |
 | Conversation engine | `src/lib/ai/agent.ts` (state machine), `parse.ts` (EN/FR field parser), `followups.ts` |

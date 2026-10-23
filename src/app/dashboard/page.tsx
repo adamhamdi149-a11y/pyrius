@@ -2,7 +2,7 @@
 import { ArrowRight, BedDouble, Bell, CalendarClock, LineChart, Plane, Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Orb } from "@/components/ai/Orb";
+import { LiveOrb } from "@/components/ai/LiveOrb";
 import { OfferDetailDialog, SavedRow, TrackerRow } from "@/components/offers/OfferViews";
 import { summarizeTrips, TripRow, TripSpotlight } from "@/components/offers/TripViews";
 import { EmptyState, Skeleton } from "@/components/ui/primitives";
@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
         <div className="metrics">
           {metrics.map(({ label, value, icon: Icon, href, sub, accent }) => (
-            <Link key={label} href={href} className={`metric ${accent ? "metric--accent" : ""}`}>
+            <Link key={label} href={href} data-glow className={`metric m-press ${accent ? "metric--accent" : ""}`}>
               <div className="metric__top">
                 {label}
                 <Icon />
@@ -74,7 +74,9 @@ export default function DashboardPage() {
 
         {isEmpty ? (
           <section className="welcome-panel">
-            <Orb />
+            <div className="panel-orb">
+              <LiveOrb mood="idle" />
+            </div>
             <div>
               <h2 className="t-h2">{t("empty.startTitle")}</h2>
               <p className="t-body" style={{ marginTop: 6, maxWidth: 520 }}>

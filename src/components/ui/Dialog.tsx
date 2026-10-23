@@ -1,6 +1,7 @@
 "use client";
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { DURATION } from "@/lib/motion";
 import { createPortal } from "react-dom";
 import { cx } from "@/lib/utils";
 
@@ -20,6 +21,24 @@ interface DialogProps {
 export function Dialog({ open, onClose, title, description, children, footer, wide, sheet }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Stay mounted briefly after closing so the panel can animate out.
+  const [mounted, setMounted] = useState(open);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+    if (!mounted) return;
+    setClosing(true);
+    const id = setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, DURATION.base + 20);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -53,10 +72,10 @@ export function Dialog({ open, onClose, title, description, children, footer, wi
     };
   }, [open, onClose]);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className={cx("overlay", sheet && "overlay--sheet")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={cx("overlay", sheet && "overlay--sheet")} data-closing={closing} onMouseDown={(e) => e.target === e.currentTarget && !closing && onClose()}>
       <div ref={ref} className={cx(sheet ? "sheet" : "dialog", wide && "dialog--wide")} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         {sheet && <div className="sheet__grip" />}
         <div className="dialog__head">

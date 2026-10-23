@@ -133,7 +133,7 @@ export function TripCard({ trip, index, onDelete }: { trip: TripSummary; index: 
     { k: "car", label: "Car", icon: Car },
   ] as const;
   return (
-    <article className="tripcard" style={{ animationDelay: `${index * 50}ms` }}>
+    <article className="tripcard" data-glow style={{ animationDelay: `${index * 50}ms` }}>
       <div className="tripcard__media">
         {trip.image ? (
           <SmartImage src={trip.image.replace("w=1200", "w=700")} alt={trip.dest ?? ""} ratio="16 / 9" />

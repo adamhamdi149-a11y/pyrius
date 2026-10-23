@@ -19,6 +19,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { LogoMark } from "@/components/brand/Logo";
+import { PointerFX } from "@/components/fx/PointerFX";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { initials } from "@/components/ui/primitives";
 import { planById } from "@/lib/plans";
@@ -176,6 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
 
       <div className="main">
+        <PointerFX />
         <header className="topbar">
           <button className="icon-btn" onClick={() => setDrawer(true)} aria-label={t("nav.menu")} aria-expanded={drawer}>
             <Menu />
@@ -192,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </header>
 
-        <div className="main__body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div className="main__body">
           {children}
         </div>
 

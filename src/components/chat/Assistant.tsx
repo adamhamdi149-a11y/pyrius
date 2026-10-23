@@ -1,8 +1,8 @@
 "use client";
 import { ArrowDown, ArrowUpRight, CalendarSearch, Info, Palmtree, PiggyBank, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Orb, type OrbState } from "@/components/ai/Orb";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { OrbStage } from "@/components/ai/OrbStage";
 import { CarResults, BusinessDirectory } from "@/components/results/CarResults";
 import { FlightResults } from "@/components/results/FlightResults";
 import { HotelResults } from "@/components/results/HotelResults";
@@ -11,10 +11,12 @@ import { airportByCode } from "@/lib/data/catalog";
 import type { MessageKey } from "@/lib/i18n";
 import { newConversation, useStore } from "@/lib/store/AppStore";
 import type { AgentReply, Attachment, ChatMessage, Chip, ChipAction, Conversation, FlightSearchParams, OfferKind, TripPreferences } from "@/lib/types";
-import { formatRange, uid } from "@/lib/utils";
-import { Composer, type ComposerHandle } from "./Composer";
+import { DURATION, stagger, type OrbMood } from "@/lib/motion";
+import { cx, formatRange, uid } from "@/lib/utils";
+import { Composer, type ComposerHandle, type ComposerState } from "./Composer";
 import { EditSearchDialog } from "./EditSearchDialog";
 import { AssistantMessage, ErrorRow, Thinking, UserMessage } from "./Messages";
+import { TripBrief } from "./TripBrief";
 
 type QuickPrefs = Pick<TripPreferences, "nonstopOnly" | "carryOnOnly" | "flexibleDates">;
 
@@ -25,11 +27,16 @@ const SUGGESTIONS: { key: MessageKey; sub: MessageKey; icon: typeof Sparkles; en
   { key: "suggest.warm", sub: "suggest.warmSub", icon: Palmtree, en: "Discover somewhere warm in February", fr: "Découvre un endroit chaud en février" },
 ];
 
+const EXAMPLES = {
+  en: ["Somewhere warm in February, under $800…", "Tokyo for two in the spring…", "A long weekend in Lisbon from Toronto…", "Paris, March 10 to 17, nonstop…"],
+  fr: ["Un endroit chaud en février, moins de 800 $…", "Tokyo à deux au printemps…", "Un long week-end à Lisbonne depuis Toronto…", "Paris du 10 au 17 mars, vol direct…"],
+};
+
 let statusCache: Promise<{ ai: string }> | null = null;
 
-function OrbitBackdrop() {
+function OrbitBackdrop({ leaving }: { leaving: boolean }) {
   return (
-    <div className="ambient" aria-hidden="true">
+    <div className={cx("ambient", leaving && "ambient--leave")} aria-hidden="true">
       <svg viewBox="0 0 1100 620" fill="none">
         <g stroke="currentColor" strokeWidth="1">
           <ellipse cx="550" cy="214" rx="210" ry="64" transform="rotate(-8 550 214)" />
@@ -58,7 +65,13 @@ export function Assistant() {
   const [editing, setEditing] = useState<FlightSearchParams | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [draftPrefs, setDraftPrefs] = useState<QuickPrefs>({});
+  const [flash, setFlash] = useState<"success" | "error" | null>(null);
+  const [pulseKey, setPulseKey] = useState(0);
+  const [leaving, setLeaving] = useState(false);
   const composer = useRef<ComposerHandle>(null);
+  const welcomeAnchor = useRef<HTMLDivElement>(null);
+  const orbSlot = useRef<HTMLSpanElement>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -77,6 +90,7 @@ export function Assistant() {
   useEffect(() => {
     const onNew = () => {
       setError(null);
+      setFlash(null);
       setAnimatingId(null);
       requestAnimationFrame(() => composer.current?.focus());
     };
@@ -139,6 +153,7 @@ export function Assistant() {
     async (c: Conversation, text: string, action?: ChipAction) => {
       setPending(true);
       setError(null);
+      setFlash(null);
       const started = Date.now();
       try {
         const res = await fetch("/api/chat", {
@@ -159,10 +174,16 @@ export function Assistant() {
         await new Promise((r) => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
         const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: reply.reply, chips: reply.chips, attachment: reply.attachment, at: new Date().toISOString() };
         setEngine(reply.engine);
+        // Calm success: a short pulse from the orb, then back to idle.
+        setPulseKey((k) => k + 1);
+        setFlash("success");
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setFlash((f) => (f === "success" ? null : f)), DURATION.successPulse);
         setAnimatingId(ai.id);
         setTyping(true);
         save({ ...c, messages: [...c.messages, ai], prefs: reply.prefs, stage: reply.stage, title: reply.title ?? c.title });
       } catch {
+        setFlash("error");
         setError({ retry: () => request(c, text, action) });
       } finally {
         setPending(false);
@@ -178,6 +199,11 @@ export function Assistant() {
     if (!base) {
       const fresh = newConversation(settings);
       base = { ...fresh, prefs: { ...fresh.prefs, ...stripUndefined(draftPrefs), askedPrefs: Object.values(draftPrefs).some(Boolean) || undefined } };
+    }
+    if (!base.messages.length) {
+      // Welcome dissolves while the orb flies down into the composer.
+      setLeaving(true);
+      setTimeout(() => setLeaving(false), DURATION.welcomeLeave);
     }
     const user: ChatMessage = { id: uid("m_"), role: "user", text, at: new Date().toISOString() };
     const c: Conversation = {
@@ -260,28 +286,43 @@ export function Assistant() {
   };
 
   const empty = !conv || conv.messages.length === 0;
-  emptyRef.current = empty;
+  const showWelcome = empty || leaving;
+  emptyRef.current = showWelcome;
   const lastId = conv?.messages.at(-1)?.id;
-  const orbState: OrbState = listening ? "listening" : pending ? "thinking" : "idle";
+  const mood: OrbMood = listening ? "listening" : pending ? "thinking" : flash ?? "idle";
+  const composerState: ComposerState = pending ? "processing" : flash ?? "idle";
+  const savedKinds = useMemo(() => new Set<OfferKind>(store.saved.filter((s) => s.conversationId === conv?.id).map((s) => s.kind)), [store.saved, conv?.id]);
+
+  const statusText = listening
+    ? L("Listening — speak naturally, then tap stop.", "À l'écoute — parlez naturellement, puis touchez arrêter.")
+    : pending
+      ? L("Pyrius is working on your request…", "Pyrius traite votre demande…")
+      : flash === "error"
+        ? L("Couldn't reach Pyrius. Your message is kept — try again.", "Impossible de joindre Pyrius. Votre message est conservé — réessayez.")
+        : flash === "success"
+          ? L("Reply ready.", "Réponse prête.")
+          : L("Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.", "Pyrius suggère et compare; vous réservez toujours directement auprès du fournisseur. Les prix affichés sont des données de démonstration.");
+
+  const modePill = engine && (
+    <span className="mode-pill" data-live={engine === "openai"} title={engine === "openai" ? "Field extraction by your configured AI model. Offers always come from the travel provider." : t("chat.demoModeHint")}>
+      <span className="mode-pill__dot" />
+      {engine === "openai" ? t("chat.liveMode") : t("chat.demoMode")}
+      <Info style={{ width: 12, height: 12, opacity: 0.6 }} />
+    </span>
+  );
 
   return (
-    <div className="chat">
-      <div className="chat__bar">
-        {engine && (
-          <span className="mode-pill" data-live={engine === "openai"} title={engine === "openai" ? "Field extraction by your configured AI model. Offers always come from the travel provider." : t("chat.demoModeHint")}>
-            <span className="mode-pill__dot" />
-            {engine === "openai" ? t("chat.liveMode") : t("chat.demoMode")}
-            <Info style={{ width: 12, height: 12, opacity: 0.6 }} />
-          </span>
-        )}
-      </div>
+    <div className="chat" data-mood={mood}>
+      <OrbStage mood={mood} pulseKey={pulseKey} anchor={showWelcome && !leaving ? welcomeAnchor : orbSlot} anchorKey={showWelcome && !leaving ? "welcome" : "dock"} />
+      {showWelcome && <div className="chat__bar">{modePill}</div>}
 
       <div className="chat__scroll" ref={scroller} onScroll={onScroll}>
-        {empty && <OrbitBackdrop />}
-        <div className={empty ? "chat__inner chat__inner--empty" : "chat__inner"} ref={inner}>
-          {empty ? (
-            <section className="welcome" aria-labelledby="welcome-title">
-              <Orb state={orbState} />
+        {!showWelcome && conv && <TripBrief conv={conv} saved={savedKinds} locale={settings.locale} pending={pending} aside={modePill} />}
+        {showWelcome && <OrbitBackdrop leaving={leaving} />}
+        <div className={showWelcome ? "chat__inner chat__inner--empty" : "chat__inner"} ref={inner}>
+          {showWelcome ? (
+            <section className={cx("welcome", leaving && "welcome--leave")} aria-labelledby="welcome-title">
+              <div className="orb-anchor welcome__orb" ref={welcomeAnchor} />
               <span className="welcome__eyebrow">
                 <i aria-hidden="true" />
                 {t("brand.tagline")}
@@ -290,9 +331,9 @@ export function Assistant() {
                 {t("welcome.title")}
               </h1>
               <p className="welcome__sub">{t("welcome.subtitle")}</p>
-              <div className="suggest">
-                {SUGGESTIONS.map(({ key, sub, icon: Icon, en, fr }) => (
-                  <button key={key} className="suggest__card" onClick={() => send(settings.locale === "fr" ? fr : en)} disabled={pending}>
+              <div className="suggest m-stagger">
+                {SUGGESTIONS.map(({ key, sub, icon: Icon, en, fr }, i) => (
+                  <button key={key} className="suggest__card m-press" data-glow style={stagger(i + 2)} onClick={() => send(settings.locale === "fr" ? fr : en)} disabled={pending || leaving}>
                     <span className="suggest__icon">
                       <Icon />
                     </span>
@@ -326,12 +367,19 @@ export function Assistant() {
               ),
             )
           )}
-          {pending && <Thinking label={t("chat.thinking")} />}
-          {error && <ErrorRow text={t("chat.error")} retryLabel={t("chat.retry")} onRetry={error.retry} />}
+          {pending && !showWelcome && <Thinking label={L("Pyrius is thinking", "Pyrius réfléchit")} slowLabel={L("Still working on it", "Toujours en cours")} />}
+          {error && !showWelcome && (
+            <ErrorRow
+              text={L("Pyrius couldn't answer that", "Pyrius n'a pas pu répondre")}
+              hint={L("The assistant service didn't respond. Nothing was lost — retry when you're ready.", "Le service n'a pas répondu. Rien n'est perdu — réessayez quand vous voulez.")}
+              retryLabel={t("chat.retry")}
+              onRetry={error.retry}
+            />
+          )}
         </div>
       </div>
 
-      {!atBottom && !empty && (
+      {!atBottom && !showWelcome && (
         <button className="jump" onClick={() => scrollToBottom()}>
           <ArrowDown />
           Latest
@@ -339,8 +387,23 @@ export function Assistant() {
       )}
 
       <div className="dock">
-        <Composer ref={composer} onSend={(v) => send(v)} busy={pending} followUp={!empty} prefs={quickPrefs} onPrefsChange={onPrefsChange} onListeningChange={setListening} />
-        <p className="composer__foot">Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.</p>
+        <Composer
+          ref={composer}
+          onSend={(v) => send(v)}
+          busy={pending}
+          followUp={!showWelcome}
+          prefs={quickPrefs}
+          onPrefsChange={onPrefsChange}
+          onListeningChange={setListening}
+          state={composerState}
+          orbSlot={orbSlot}
+          docked={!(showWelcome && !leaving)}
+          examples={EXAMPLES[settings.locale]}
+        />
+        <p className="composer__foot" data-state={listening ? "listening" : composerState} aria-live="polite">
+          <i aria-hidden="true" />
+          {statusText}
+        </p>
       </div>
 
       {editing && <EditSearchDialog open onClose={() => setEditing(null)} params={editing} onApply={applyEdit} />}

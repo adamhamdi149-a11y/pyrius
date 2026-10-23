@@ -748,7 +748,7 @@ ul {
   border: 1px solid var(--border);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-3);
-  animation: dialog-in var(--d-3) var(--ease);
+  animation: dialog-in var(--dur-slow) var(--ease-spring);
 }
 
 .dialog--wide {
@@ -813,6 +813,31 @@ ul {
 
 @keyframes fade-in {
   from { opacity: 0; }
+}
+
+@keyframes fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes dialog-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+
+@keyframes sheet-out {
+  to { transform: translateY(100%); }
+}
+
+.overlay[data-closing="true"] {
+  animation: fade-out var(--dur-fast) var(--ease-exit) forwards;
+  pointer-events: none;
+}
+
+.overlay[data-closing="true"] .dialog {
+  animation: dialog-out var(--dur-fast) var(--ease-exit) forwards;
+}
+
+.overlay[data-closing="true"] .sheet {
+  animation: sheet-out var(--dur-base) var(--ease-exit) forwards;
 }
 
 @keyframes dialog-in {
@@ -923,7 +948,12 @@ ul {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-3);
-  animation: dialog-in var(--d-2) var(--ease);
+  transform-origin: top left;
+  animation: pop-in var(--dur-base) var(--ease-spring);
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
 }
 
 .menu-item {

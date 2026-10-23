@@ -562,7 +562,6 @@
   max-width: var(--content-w);
   margin: 0 auto;
   padding: 40px 32px 72px;
-  animation: rise var(--d-4) var(--ease);
 }
 
 .page__head {

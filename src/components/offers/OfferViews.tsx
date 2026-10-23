@@ -8,6 +8,7 @@ import { PriceChart } from "@/components/tracking/PriceChart";
 import { TrackDialog } from "@/components/tracking/TrackDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { DemoBadge, SmartImage } from "@/components/ui/primitives";
+import { Price } from "@/components/ui/Price";
 import { useToast } from "@/components/ui/Toast";
 import { cityName } from "@/lib/data/catalog";
 import { useStore } from "@/lib/store/AppStore";
@@ -106,7 +107,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
   };
 
   return (
-    <div className="srow" style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}>
+    <div className="srow" data-glow style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}>
       <OfferThumb o={o} />
       <div className="srow__main">
         <div className="srow__title">
@@ -124,7 +125,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
         </div>
       </div>
       <div className="srow__price">
-        <span className="price price--sm num">{money(price, o.offer.currency, loc)}</span>
+        <Price amount={price} currency={o.offer.currency} locale={loc} />
         {tracker ? <Delta from={tracker.savedPrice} to={tracker.lastKnownPrice} currency={tracker.currency} locale={loc} /> : <span className="t-meta">total</span>}
       </div>
       <div className="srow__actions">
@@ -177,7 +178,7 @@ export function TrackerRow({ t }: { t: PriceTracker }) {
   const { settings } = useStore();
   const Icon = KIND_ICON[t.kind];
   return (
-    <div className="trow">
+    <div className="trow" data-glow>
       <div style={{ minWidth: 0 }}>
         <div className="trow__title">
           <Icon />
@@ -195,7 +196,7 @@ export function TrackerRow({ t }: { t: PriceTracker }) {
         <PriceChart history={t.history.slice(-20)} target={t.targetPrice} currency={t.currency} height={40} compact />
       </div>
       <div className="trow__prices">
-        <span className="trow__now num">{money(t.lastKnownPrice, t.currency, settings.locale)}</span>
+        <Price amount={t.lastKnownPrice} currency={t.currency} locale={settings.locale} size="sm" />
         <Delta from={t.savedPrice} to={t.lastKnownPrice} currency={t.currency} locale={settings.locale} />
       </div>
     </div>
@@ -212,7 +213,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
   const saved = store.saved.find((s) => s.id === t.offerId);
 
   return (
-    <article className="tcard" style={{ animationDelay: `${index * 50}ms` }}>
+    <article className="tcard" data-glow style={{ animationDelay: `${index * 50}ms` }}>
       <div className="tcard__info">
         <div>
           <div className="t-eyebrow" style={{ display: "flex", alignItems: "center", gap: 6 }}>

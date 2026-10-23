@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Motion system
+   One vocabulary for every animation in Pyrius. Motion explains state:
+   things enter from where they come from, and calm down when done.
+   ========================================================================== */
+
+:root {
+  /* Durations */
+  --dur-instant: 90ms;
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
+  --dur-slower: 700ms;
+  --dur-orb-flight: 760ms;
+
+  /* Easing */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-spring: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.2%, 1);
+
+  /* Distances */
+  --rise: 10px;
+  --rise-sm: 4px;
+
+  /* Stagger step for lists */
+  --stagger: 45ms;
+
+  /* Older aliases kept so existing rules follow the system */
+  --ease: var(--ease-out-expo);
+  --d-1: var(--dur-fast);
+  --d-2: var(--dur-base);
+  --d-3: var(--dur-slow);
+  --d-4: 560ms;
+}
+
+/* Animated angle for rotating borders (falls back to static where unsupported) */
+@property --m-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ---------- Keyframes ---------- */
+
+@keyframes m-fade-up {
+  from { opacity: 0; transform: translateY(var(--rise)); }
+}
+
+@keyframes m-fade-down {
+  from { opacity: 0; transform: translateY(calc(var(--rise) * -1)); }
+}
+
+@keyframes m-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes m-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+@keyframes m-blur-in {
+  from { opacity: 0; filter: blur(6px); transform: translateY(var(--rise-sm)); }
+}
+
+@keyframes m-leave {
+  to { opacity: 0; filter: blur(8px); transform: translateY(-14px) scale(0.985); }
+}
+
+@keyframes m-spin {
+  to { --m-angle: 360deg; }
+}
+
+@keyframes m-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes m-success {
+  0% { transform: scale(0.4); opacity: 0; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes m-ping {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes m-route-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* ---------- Reusable variants ---------- */
+
+.m-enter { animation: m-fade-up var(--dur-slow) var(--ease-out-expo) backwards; }
+.m-pop-in { animation: m-scale-in var(--dur-base) var(--ease-spring) backwards; }
+.m-blur { animation: m-blur-in var(--dur-slow) var(--ease-out-expo) backwards; }
+
+/* Children enter one after another; set --i on each child */
+.m-stagger > * {
+  animation: m-fade-up var(--dur-slow) var(--ease-out-expo) backwards;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+
+/* Interactive press feedback shared by cards and buttons */
+.m-press {
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard),
+    background-color var(--dur-base) var(--ease-standard);
+}
+
+.m-press:active:not(:disabled) {
+  transform: scale(0.98);
+  transition-duration: var(--dur-instant);
+}
+
+/* Route transitions (app/template.tsx) */
+.route {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: m-route-in var(--dur-slow) var(--ease-out-expo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rise: 0px;
+    --rise-sm: 0px;
+    --stagger: 0ms;
+  }
+}

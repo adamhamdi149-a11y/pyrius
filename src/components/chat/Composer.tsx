@@ -1,6 +1,6 @@
 "use client";
-import { ArrowUp, Briefcase, CalendarRange, Mic, PlaneTakeoff, SlidersHorizontal, Square } from "lucide-react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { ArrowUp, Briefcase, CalendarRange, Check, Mic, PlaneTakeoff, SlidersHorizontal, Square } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { useDismiss } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
@@ -13,6 +13,9 @@ export interface ComposerHandle {
 
 type QuickPrefs = Pick<TripPreferences, "nonstopOnly" | "carryOnOnly" | "flexibleDates">;
 
+/** Visible composer state; mirrors the real request lifecycle. */
+export type ComposerState = "idle" | "listening" | "processing" | "success" | "error";
+
 interface Props {
   onSend: (text: string) => void;
   busy: boolean;
@@ -20,6 +23,13 @@ interface Props {
   prefs: QuickPrefs;
   onPrefsChange: (p: QuickPrefs) => void;
   onListeningChange?: (on: boolean) => void;
+  state: ComposerState;
+  /** Where the live orb docks inside the composer. */
+  orbSlot?: Ref<HTMLSpanElement>;
+  /** Example requests that cycle as a placeholder on the welcome screen. */
+  examples?: string[];
+  /** True while the live orb sits in the composer. */
+  docked?: boolean;
 }
 
 // Minimal typing for the Web Speech API (not in lib.dom for all browsers).
@@ -35,12 +45,15 @@ interface SpeechRec {
   onend: (() => void) | null;
 }
 
-export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ onSend, busy, followUp, prefs, onPrefsChange, onListeningChange }, ref) {
+export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ onSend, busy, followUp, prefs, onPrefsChange, onListeningChange, state, orbSlot, examples, docked }, ref) {
   const { t, settings } = useStore();
   const toast = useToast();
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [voice, setVoice] = useState<boolean | null>(null);
+  const [focused, setFocused] = useState(false);
+  const [example, setExample] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null);
   const rec = useRef<SpeechRec | null>(null);
   const base = useRef("");
@@ -63,6 +76,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
   }, [text]);
 
   useEffect(() => onListeningChange?.(listening), [listening, onListeningChange]);
+
+  // Voice is offered only where the browser can actually do it.
+  useEffect(() => {
+    const W = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    setVoice(Boolean(W.SpeechRecognition ?? W.webkitSpeechRecognition));
+  }, []);
+
+  // Cycle example requests while the welcome composer is empty and idle.
+  const showExamples = Boolean(examples?.length) && !followUp && !text && !listening && !focused;
+  useEffect(() => {
+    if (!showExamples || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setExample((i) => (i + 1) % examples!.length), 3600);
+    return () => clearInterval(id);
+  }, [showExamples, examples]);
   useEffect(() => () => rec.current?.abort(), []);
 
   const submit = () => {
@@ -116,7 +143,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
   const ready = text.trim().length > 0 && !busy;
 
   return (
-    <div className="composer" data-listening={listening}>
+    <div className="composer" data-listening={listening} data-state={listening ? "listening" : state} data-focused={focused} data-docked={docked ?? followUp}>
+      <span className="composer__ring" aria-hidden="true" />
       <label htmlFor="composer-input" className="sr-only">
         {t("composer.placeholder")}
       </label>
@@ -126,7 +154,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
         className="composer__input"
         rows={1}
         value={text}
-        placeholder={listening ? t("composer.listening") : followUp ? t("composer.placeholderFollow") : t("composer.placeholder")}
+        placeholder={showExamples ? "" : listening ? t("composer.listening") : followUp ? t("composer.placeholderFollow") : t("composer.placeholder")}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -138,7 +168,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
         enterKeyHint="send"
         aria-describedby="composer-hint"
       />
+      {showExamples && (
+        <span className="composer__example" aria-hidden="true" key={example}>
+          {examples![example]}
+        </span>
+      )}
       <div className="composer__row">
+        <span className="composer__orb" ref={orbSlot} aria-hidden="true" />
         <div style={{ position: "relative" }} ref={popRef}>
           <button type="button" className="composer__tool" aria-expanded={prefsOpen} aria-haspopup="dialog" onClick={() => setPrefsOpen((o) => !o)} title={t("composer.prefs")}>
             <SlidersHorizontal />
@@ -176,6 +212,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
           </span>
         )}
         <div className="composer__spacer" />
+        {voice && (
         <button
           type="button"
           className="icon-btn composer__mic"
@@ -187,8 +224,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
         >
           {listening ? <Square style={{ width: 14, height: 14 }} fill="currentColor" /> : <Mic />}
         </button>
+        )}
         <button type="button" className="composer__send" data-ready={ready} disabled={!ready} onClick={submit} aria-label={t("composer.send")}>
-          {busy ? <span className="composer__spinner" /> : <ArrowUp strokeWidth={2.4} />}
+          {busy ? <span className="composer__spinner" /> : state === "success" && !text ? <Check strokeWidth={2.4} className="composer__ok" /> : <ArrowUp strokeWidth={2.4} />}
         </button>
       </div>
       <span id="composer-hint" className="sr-only">

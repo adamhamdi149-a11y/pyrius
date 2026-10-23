@@ -1,39 +1,48 @@
 "use client";
 import { AlertCircle, ArrowRight, Building2, Car, Compass, Home, Hotel, KeyRound, LayoutDashboard, LineChart, Plane, RotateCcw, SkipForward, SlidersHorizontal, Sun } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Orb } from "@/components/ai/Orb";
+import { prefersReducedMotion, stagger } from "@/lib/motion";
 import type { Chip, ChatMessage } from "@/lib/types";
 
-/** Reveals text progressively (word groups), then signals completion so chips/results can appear. */
-export function useTypewriter(text: string, active: boolean, onDone?: () => void) {
-  const [n, setN] = useState(active ? 0 : text.length);
+const WORD_STEP = 16; // ms between words
+const WORD_FADE = 320; // ms each word takes to settle
+
+/**
+ * Reveals an answer word by word with a soft blur-in, then reports completion
+ * so chips and results appear only after the sentence has landed.
+ */
+function StreamText({ text, animate, onDone }: { text: string; animate: boolean; onDone: () => void }) {
+  const words = useMemo(() => text.split(/(\s+)/), [text]);
   const done = useRef(onDone);
   done.current = onDone;
+  const [live] = useState(() => animate && !prefersReducedMotion());
+
   useEffect(() => {
-    if (!active) {
-      setN(text.length);
+    if (!live) {
+      done.current();
       return;
     }
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setN(text.length);
-      done.current?.();
-      return;
-    }
-    let i = 0;
-    const step = Math.max(2, Math.round(text.length / 90));
-    const id = setInterval(() => {
-      i = Math.min(text.length, i + step);
-      // Advance to the next word boundary so words never appear half-typed.
-      while (i < text.length && !/\s/.test(text[i])) i++;
-      setN(i);
-      if (i >= text.length) {
-        clearInterval(id);
-        done.current?.();
-      }
-    }, 22);
-    return () => clearInterval(id);
-  }, [text, active]);
-  return text.slice(0, n);
+    const count = words.filter((w) => w.trim()).length;
+    const id = setTimeout(() => done.current(), Math.min(count * WORD_STEP, 2200) + WORD_FADE);
+    return () => clearTimeout(id);
+  }, [live, words]);
+
+  if (!live) return <>{text}</>;
+  let i = 0;
+  return (
+    <>
+      {words.map((w, k) =>
+        w.trim() ? (
+          <span key={k} className="word" style={{ animationDelay: `${Math.min(i++ * WORD_STEP, 2200)}ms` }}>
+            {w}
+          </span>
+        ) : (
+          w
+        ),
+      )}
+    </>
+  );
 }
 
 function chipIcon(c: Chip) {
@@ -74,25 +83,27 @@ export function AssistantMessage({
   children?: React.ReactNode;
 }) {
   const [typed, setTyped] = useState(!animate);
-  const text = useTypewriter(m.text, animate, () => {
-    setTyped(true);
-    onTyped();
-  });
   return (
     <>
-      <div className="msg msg--ai" id={`m-${m.id}`}>
+      <div className="msg msg--ai" id={`m-${m.id}`} data-live={animate}>
         <div className="msg__avatar">
           <Orb size="sm" />
         </div>
         <div className="msg__content">
           <p className="msg__text">
-            {text}
-            {!typed && <span className="msg__caret" aria-hidden="true" />}
+            <StreamText
+              text={m.text}
+              animate={animate}
+              onDone={() => {
+                setTyped(true);
+                if (animate) onTyped();
+              }}
+            />
           </p>
           {typed && showChips && m.chips && m.chips.length > 0 && (
-            <div className="msg__chips">
-              {m.chips.map((c) => (
-                <button key={c.label} className="chip" onClick={() => onChip(c)}>
+            <div className="msg__chips m-stagger">
+              {m.chips.map((c, i) => (
+                <button key={c.label} className="chip m-press" style={stagger(i)} onClick={() => onChip(c)}>
                   {chipIcon(c)}
                   {c.label}
                   {c.action.type === "navigate" && <ArrowRight />}
@@ -107,26 +118,40 @@ export function AssistantMessage({
   );
 }
 
-export function Thinking({ label }: { label: string }) {
+/** Shown only while a real request to the assistant is in flight. */
+export function Thinking({ label, slowLabel }: { label: string; slowLabel: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(id);
+  }, []);
   return (
     <div className="thinking" role="status" aria-live="polite">
-      <Orb size="sm" state="thinking" />
-      <span className="thinking__text">{label}…</span>
+      <span className="thinking__dots" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="thinking__text">{slow ? slowLabel : label}</span>
     </div>
   );
 }
 
-export function ErrorRow({ text, onRetry, retryLabel }: { text: string; onRetry: () => void; retryLabel: string }) {
+export function ErrorRow({ text, hint, onRetry, retryLabel }: { text: string; hint: string; onRetry: () => void; retryLabel: string }) {
   return (
-    <div className="msg msg--ai">
+    <div className="msg msg--ai msg--error" role="alert">
       <div className="msg__avatar">
-        <Orb size="sm" />
+        <span className="msg__erricon">
+          <AlertCircle />
+        </span>
       </div>
       <div className="msg__content">
-        <div className="msg__error">
-          <AlertCircle style={{ width: 16, height: 16 }} />
-          {text}
-          <button className="btn btn--secondary btn--sm" onClick={onRetry}>
+        <div className="msg__errcard">
+          <div>
+            <div className="msg__errtitle">{text}</div>
+            <div className="msg__errhint">{hint}</div>
+          </div>
+          <button className="btn btn--secondary btn--sm m-press" onClick={onRetry}>
             <RotateCcw />
             {retryLabel}
           </button>

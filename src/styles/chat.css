@@ -369,11 +369,6 @@
   animation: rise var(--d-4) var(--ease);
 }
 
-.welcome .orb {
-  --orb: clamp(112px, 15vh, 152px);
-  margin: 30px 0 58px;
-}
-
 .welcome__eyebrow {
   display: inline-flex;
   align-items: center;
@@ -586,30 +581,6 @@
   animation: rise var(--d-4) var(--ease);
 }
 
-/* Thinking indicator */
-.thinking {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  animation: rise var(--d-3) var(--ease);
-}
-
-.thinking__text {
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  background: linear-gradient(90deg, var(--text-3) 0%, var(--text) 45%, var(--text-3) 90%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: text-shine 1.8s linear infinite;
-}
-
-@keyframes text-shine {
-  from { background-position: 100% 0; }
-  to { background-position: -100% 0; }
-}
-
 /* Jump to latest */
 .jump {
   position: absolute;
@@ -819,6 +790,7 @@
 
 .composer__foot {
   margin-top: 10px;
+  min-height: 18px;
   text-align: center;
   font-size: 11.5px;
   color: var(--text-3);
@@ -886,11 +858,6 @@
     gap: 24px;
   }
 
-  .welcome .orb {
-    --orb: 112px;
-    margin: 18px 0 32px;
-  }
-
   .welcome__sub {
     font-size: var(--fs-base);
   }
@@ -941,5 +908,451 @@
 
   .jump {
     bottom: 120px;
+  }
+}
+
+/* ==========================================================================
+   Living chat: welcome transition, stream reveal, states, trip brief
+   ========================================================================== */
+
+/* Welcome orb anchor reserves the space the live orb flies into */
+.welcome__orb {
+  width: clamp(112px, 15vh, 156px);
+  height: clamp(112px, 15vh, 156px);
+  margin: 30px 0 58px;
+}
+
+.welcome--leave {
+  animation: m-leave var(--dur-slow) var(--ease-exit) forwards;
+  pointer-events: none;
+}
+
+.ambient {
+  transition: opacity var(--dur-slow) var(--ease-standard);
+}
+
+.ambient--leave {
+  opacity: 0;
+}
+
+/* Messages */
+.msg--user {
+  animation: msg-user-in var(--dur-slow) var(--ease-out-expo) backwards;
+}
+
+@keyframes msg-user-in {
+  from { opacity: 0; transform: translate3d(12px, 6px, 0) scale(0.98); }
+}
+
+.msg--ai[data-live="true"] .msg__avatar {
+  animation: m-scale-in var(--dur-base) var(--ease-spring) backwards;
+}
+
+.word {
+  display: inline-block;
+  animation: m-blur-in var(--dur-slow) var(--ease-out-expo) backwards;
+  white-space: pre-wrap;
+}
+
+.msg__avatar .orb--sm .orb__flow,
+.msg__avatar .orb--sm .orb__halo,
+.msg__avatar .orb--sm .orb__body {
+  animation: none;
+}
+
+/* Thinking: three dots that breathe while the request is genuinely in flight */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 40px;
+  animation: m-fade-up var(--dur-base) var(--ease-out-expo);
+}
+
+.thinking__dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.thinking__dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dot-breathe 1.2s var(--ease-in-out) infinite;
+}
+
+.thinking__dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking__dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.85); }
+  50% { opacity: 1; transform: translateY(-3px) scale(1); }
+}
+
+/* Error */
+.msg__erricon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.msg__erricon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.msg__errcard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--error) 28%, var(--border));
+  background: color-mix(in srgb, var(--error) 6%, var(--surface));
+  animation: m-fade-up var(--dur-slow) var(--ease-out-expo);
+}
+
+.msg__errtitle {
+  font-size: var(--fs-sm);
+  font-weight: 580;
+}
+
+.msg__errhint {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+/* ---------- Composer: ring, states, docked orb, example placeholder ---------- */
+
+.composer {
+  isolation: isolate;
+}
+
+.composer__ring {
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--m-angle), transparent 0deg, rgba(255, 118, 40, 0.85) 60deg, rgba(255, 190, 140, 0.9) 90deg, transparent 150deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-standard);
+  pointer-events: none;
+}
+
+.composer[data-state="processing"] .composer__ring,
+.composer[data-state="listening"] .composer__ring {
+  opacity: 1;
+  animation: m-spin 2.4s linear infinite;
+}
+
+.composer[data-state="listening"] .composer__ring {
+  animation-duration: 1.4s;
+}
+
+.composer[data-state="error"] {
+  border-color: color-mix(in srgb, var(--error) 45%, var(--border));
+}
+
+.composer[data-state="success"] {
+  border-color: var(--accent-line);
+}
+
+.composer__orb {
+  width: 0;
+  height: 22px;
+  flex: none;
+  margin: 0;
+  border-radius: 50%;
+  transition: width var(--dur-slow) var(--ease-emphasized), margin var(--dur-slow) var(--ease-emphasized);
+}
+
+/* The slot opens as the orb flies in from the welcome screen */
+.composer[data-docked="true"] .composer__orb {
+  width: 22px;
+  margin: 0 4px 0 2px;
+}
+
+.composer__example {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  top: 17px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: example-in 3.6s var(--ease-standard) both;
+}
+
+@keyframes example-in {
+  0% { opacity: 0; transform: translateY(6px); filter: blur(3px); }
+  12%, 85% { opacity: 1; transform: none; filter: none; }
+  100% { opacity: 0; transform: translateY(-6px); filter: blur(3px); }
+}
+
+.composer__ok {
+  animation: m-success var(--dur-slow) var(--ease-spring);
+}
+
+.composer__send[data-ready="true"]:hover {
+  transform: translateY(-1px);
+}
+
+/* Status line under the composer mirrors the real request state */
+.composer__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: color var(--dur-base) var(--ease-standard);
+}
+
+.composer__foot i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-3);
+  opacity: 0.5;
+  transition: background-color var(--dur-base), opacity var(--dur-base);
+}
+
+.composer__foot[data-state="processing"] i,
+.composer__foot[data-state="listening"] i {
+  background: var(--accent);
+  opacity: 1;
+  animation: dot-breathe 1.2s var(--ease-in-out) infinite;
+}
+
+.composer__foot[data-state="processing"],
+.composer__foot[data-state="listening"] {
+  color: var(--text-2);
+}
+
+.composer__foot[data-state="success"] i {
+  background: var(--success);
+  opacity: 1;
+}
+
+.composer__foot[data-state="error"] {
+  color: var(--error);
+}
+
+.composer__foot[data-state="error"] i {
+  background: var(--error);
+  opacity: 1;
+}
+
+/* ---------- Trip brief ---------- */
+
+.brief {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 12px 24px 18px;
+  background: linear-gradient(180deg, var(--bg) 62%, color-mix(in srgb, var(--bg) 0%, transparent));
+  animation: m-fade-down var(--dur-slow) var(--ease-out-expo);
+}
+
+.brief__inner {
+  max-width: var(--chat-w);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+}
+
+.brief__steps {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.brief__track {
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  top: 11px;
+  height: 1px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.brief__track span {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+  transform-origin: left;
+  transition: transform var(--dur-slower) var(--ease-emphasized);
+}
+
+.brief__step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 540;
+  color: var(--text-3);
+  transition: color var(--dur-base);
+}
+
+.brief__dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  transition: background-color var(--dur-base), border-color var(--dur-base), color var(--dur-base), box-shadow var(--dur-slow);
+}
+
+.brief__dot svg {
+  width: 12px;
+  height: 12px;
+}
+
+.brief__step.is-done {
+  color: var(--text-2);
+}
+
+.brief__step.is-done .brief__dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  animation: m-pop var(--dur-slow) var(--ease-spring);
+}
+
+.brief__step.is-active {
+  color: var(--text);
+}
+
+.brief__step.is-active .brief__dot {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.brief[data-pending="true"] .brief__step.is-active .brief__dot {
+  animation: ring-breathe 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes ring-breathe {
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent-soft); }
+  50% { box-shadow: 0 0 0 7px rgba(255, 118, 40, 0.06); }
+}
+
+.brief__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.brief__fact {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  font-weight: 520;
+  color: var(--text-2);
+  white-space: nowrap;
+  animation: m-scale-in var(--dur-base) var(--ease-spring) backwards;
+}
+
+.brief__aside {
+  margin-left: auto;
+}
+
+.chat__inner:not(.chat__inner--empty) {
+  padding-top: 8px;
+}
+
+@media (max-width: 899px) {
+  .brief {
+    padding: 8px 12px 14px;
+  }
+
+  .brief__inner {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .brief__steps {
+    gap: 10px;
+  }
+
+  .brief__label {
+    display: none;
+  }
+
+  .brief__step.is-active .brief__label {
+    display: inline;
+  }
+
+  .brief__aside {
+    display: none;
+  }
+
+  .thinking {
+    padding-left: 36px;
+  }
+
+  .composer__example {
+    left: 16px;
+    right: 16px;
+    top: 14px;
+    font-size: 16px;
+  }
+
+  .welcome__orb {
+    width: 112px;
+    height: 112px;
+    margin: 18px 0 32px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* On phones the status line appears only when it carries news */
+  .composer__foot {
+    display: none;
+  }
+
+  .composer__foot:is([data-state="processing"], [data-state="listening"], [data-state="error"]) {
+    display: flex;
+    font-size: 11px;
   }
 }

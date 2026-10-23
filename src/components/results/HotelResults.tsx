@@ -9,7 +9,10 @@ import type { Attachment, HotelOffer } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
 import { cx, formatRange, money } from "@/lib/utils";
 import { SearchSummary } from "./FlightResults";
+import { Price } from "@/components/ui/Price";
+import { stagger } from "@/lib/motion";
 import { OfferActions } from "./OfferActions";
+import { SearchProgress, SourceLine } from "./SearchProgress";
 
 type HotelAttachment = Extract<Attachment, { type: "hotels" }>;
 
@@ -25,9 +28,9 @@ interface Filters {
 
 const AMENITY_FILTERS = ["Free Wi-Fi", "Pool", "Kitchen", "Gym", "Spa", "Breakfast"];
 
-export function HotelCard({ h, conversationId, onSaved, locale }: { h: HotelOffer; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string }) {
+export function HotelCard({ h, conversationId, onSaved, locale, index = 0 }: { h: HotelOffer; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number }) {
   return (
-    <article className="hcard">
+    <article className="hcard" data-glow style={stagger(index)}>
       <div className="hcard__media">
         <SmartImage src={h.image} alt={`Representative photo for ${h.name} (demo)`} ratio="16 / 10" sizes="(max-width: 900px) 100vw, 440px" />
         <div className="hcard__overlay">
@@ -73,7 +76,7 @@ export function HotelCard({ h, conversationId, onSaved, locale }: { h: HotelOffe
         </div>
         <div className="hcard__price">
           <div>
-            <span className="price price--sm num">{money(h.pricePerNight, h.currency, locale)}</span>
+            <Price amount={h.pricePerNight} currency={h.currency} locale={locale} />
             <span className="t-meta"> / night</span>
           </div>
           <div className="t-meta num">
@@ -184,6 +187,7 @@ export function HotelResults({ attachment, conversationId, onSaved }: { attachme
         currency={p.currency}
       />
       {res.status === "loading" && (
+        <SearchProgress what={p.stayType === "apartment" ? "stays" : "hotels"}>
         <div className="hgrid" aria-busy="true">
           {[0, 1].map((i) => (
             <div key={i} className="hcard">
@@ -196,6 +200,7 @@ export function HotelResults({ attachment, conversationId, onSaved }: { attachme
             </div>
           ))}
         </div>
+        </SearchProgress>
       )}
       {res.status === "error" && (
         <div className="results__error">
@@ -208,6 +213,7 @@ export function HotelResults({ attachment, conversationId, onSaved }: { attachme
       )}
       {res.status === "ok" && (
         <>
+          <SourceLine count={offers.length} noun={p.stayType === "apartment" ? "stays" : "properties"} ms={res.ms} />
           <div className="toolbar">
             <div className="seg" role="group" aria-label="Sort by">
               {(
@@ -240,9 +246,9 @@ export function HotelResults({ attachment, conversationId, onSaved }: { attachme
           {list.length === 0 ? (
             <EmptyState icon={<BedDouble />} title="No stays match these filters" body="Try a higher nightly limit or fewer amenities." action={<button className="btn btn--secondary" onClick={reset}>Reset filters</button>} />
           ) : (
-            <div className="hgrid">
-              {list.map((h) => (
-                <HotelCard key={h.id} h={h} locale={locale} conversationId={conversationId} onSaved={onSaved} />
+            <div className="hgrid m-stagger">
+              {list.map((h, i) => (
+                <HotelCard key={h.id} h={h} index={i} locale={locale} conversationId={conversationId} onSaved={onSaved} />
               ))}
             </div>
           )}
