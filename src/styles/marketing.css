@@ -1737,14 +1737,13 @@ button.ff__select[aria-expanded="true"] svg {
 /* ---------- Color scene, calm, start ---------- */
 
 /* Copy and picker sit above the orb, so they leave upward without crossing it. */
-/* Taller than the screen: the copy and picker scroll away while the orb settles alone in the centre. */
+/* Two screens: first the CTA on its own; scroll on, and the picker arrives just above the orb,
+   which settles in the centre. The picker sits in the section's last screen, above the orb. */
 .mkf-color {
-  height: 185vh;
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  justify-items: center;
-  align-content: start;
-  padding: 116px var(--mk-pad) 5vh;
+  --orb-top: 40vh;
+  position: relative;
+  height: 210vh;
+  padding: 116px var(--mk-pad) 0;
   text-align: center;
 }
 
@@ -1763,10 +1762,15 @@ button.ff__select[aria-expanded="true"] svg {
 }
 
 .mkf-color__pick {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100vh - var(--orb-top) + 28px);
+  translate: -50% 0;
   display: grid;
   justify-items: center;
   gap: 6px;
-  margin-top: 28px;
+  width: max-content;
+  max-width: calc(100% - 32px);
 }
 
 .mkf-color__pick .orbpick {
@@ -1958,8 +1962,15 @@ button.ff__select[aria-expanded="true"] svg {
 
 .mkf[data-static="true"] .mkf-color {
   height: auto;
+  display: grid;
+  justify-items: center;
   gap: 32px;
   padding: 120px var(--mk-pad) 40px;
+}
+
+.mkf[data-static="true"] .mkf-color__pick {
+  position: static;
+  translate: none;
 }
 
 /* Without motion the orb stays in the hero, so the closing scenes don't keep room for it. */
@@ -2121,8 +2132,9 @@ button.ff__select[aria-expanded="true"] svg {
   }
 
   .mkf-color {
-    height: 175svh;
-    padding: 92px 20px 5vh;
+    --orb-top: 44svh;
+    height: 200svh;
+    padding: 92px 20px 0;
   }
 
   .mkf-color__top {
@@ -2131,7 +2143,7 @@ button.ff__select[aria-expanded="true"] svg {
   }
 
   .mkf-color__pick {
-    margin-top: 20px;
+    bottom: calc(100svh - var(--orb-top) + 24px);
   }
 
   .mkf-calm {

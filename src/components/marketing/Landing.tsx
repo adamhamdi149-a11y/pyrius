@@ -182,8 +182,13 @@ export function Landing() {
         const HERO = () => (desktop ? { x: W() * 0.21, y: H() * 0.04, k: s(Math.min(W() * 0.34, H() * 0.6, 520)) } : { x: 0, y: -H() * 0.23, k: s(Math.min(W() * 0.5, 230)) });
         const MID = () => (desktop ? { x: 0, y: -H() * 0.06, k: s(Math.min(W() * 0.2, H() * 0.36, 340)) } : { x: 0, y: H() * 0.08, k: s(W() * 0.38) });
         const CALM = () => (desktop ? { x: 0, y: -H() * 0.12, k: s(Math.min(W() * 0.22, H() * 0.38, 360)) } : { x: 0, y: -H() * 0.12, k: s(W() * 0.46) });
-        const COLOR = () => (desktop ? { x: 0, y: H() * 0.26, k: s(Math.min(W() * 0.22, H() * 0.34, 330)) } : { x: 0, y: H() * 0.24, k: s(Math.min(W() * 0.5, H() * 0.28)) });
-        const ALONE = () => (desktop ? { x: 0, y: 0, k: s(Math.min(W() * 0.26, H() * 0.42, 390)) } : { x: 0, y: 0, k: s(Math.min(W() * 0.62, H() * 0.34)) });
+        // Picker screen: the sphere's top sits at 40% (phones 44%) of the screen, matching --orb-top in the CSS,
+        // so the picker always fits between the header and the orb.
+        const ALONE = () => {
+          const d = desktop ? Math.min(W() * 0.26, H() * 0.36, 380) : Math.min(W() * 0.62, H() * 0.3);
+          const top = H() * (desktop ? 0.4 : 0.44);
+          return { x: 0, y: top + d / 2 - H() / 2, k: s(d) };
+        };
         const OUT = () => ({ x: 0, y: -H() * 0.62, k: CALM().k * 0.6 });
         const END = () => (desktop ? { x: 0, y: -H() * 0.31, k: s(Math.min(W() * 0.14, H() * 0.2, 220)) } : { x: 0, y: -H() * 0.33, k: s(Math.min(W() * 0.26, H() * 0.14)) });
         const DOCK = () => {
@@ -397,9 +402,11 @@ export function Landing() {
 
         // It rises in well below the color picker, then settles alone in the centre of the screen
         // as the copy and picker scroll away, and finally lifts over the calm line.
-        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#color", start: "top bottom", end: "top 30%", scrub: true } });
-        leg({ trigger: "#color", start: "top bottom", end: "top top" }, () => ({ ...COLOR(), y: H() * 0.6 }), COLOR);
-        leg({ trigger: "#color", start: "top top", end: "bottom bottom" }, COLOR, ALONE);
+        // While the CTA has the screen to itself the orb waits below it; scrolling on, it rises with the
+        // picker (same distance, same pace) so the two arrive together, never overlapping.
+        const colorTravel = () => (document.getElementById("color")?.offsetHeight ?? H() * 2) - H();
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#color", start: "top top", end: "top -30%", scrub: true } });
+        leg({ trigger: "#color", start: "top top", end: "bottom bottom" }, () => ({ ...ALONE(), y: ALONE().y + colorTravel() }), ALONE);
         leg({ trigger: "#calm", start: "top bottom", end: "top top" }, ALONE, CALM);
 
         // Out of the way for pricing, the comparison and the FAQ; back for the final call.
