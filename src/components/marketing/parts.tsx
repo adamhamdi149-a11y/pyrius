@@ -1,116 +1,11 @@
 "use client";
-import { BadgeDollarSign, Bell, Bookmark, BookmarkCheck, Briefcase, Calendar, Car, ChevronDown, Luggage, MapPin, Minus, Plane, Plus, Search, ShieldCheck, Star, Users } from "lucide-react";
+import { BadgeDollarSign, Bell, Bookmark, BookmarkCheck, Briefcase, Car, Luggage, MapPin, Plane, ShieldCheck, Star } from "lucide-react";
 import { Fragment as F } from "react";
 import { Orb } from "@/components/ai/Orb";
 import { Price } from "@/components/ui/Price";
 import type { CarOffer, FlightOffer, FlightSegment, HotelOffer, PricePoint } from "@/lib/types";
 import { cx, formatDuration, formatTime, parseDate } from "@/lib/utils";
-import type { FragKey, Turn } from "./scripts";
-
-/* ---------- The old search form, in pieces ---------- */
-
-export function FragmentView({ k }: { k: FragKey }) {
-  switch (k) {
-    case "to":
-      return (
-        <div className="ff ff--field">
-          <span className="ff__label">To</span>
-          <span className="ff__input">
-            <MapPin />
-            City or airport
-          </span>
-        </div>
-      );
-    case "from":
-      return (
-        <div className="ff ff--field">
-          <span className="ff__label">From</span>
-          <span className="ff__input">
-            <Plane />
-            Departure airport
-          </span>
-        </div>
-      );
-    case "dates":
-      return (
-        <div className="ff ff--cal">
-          <span className="ff__label">
-            <Calendar /> Depart — Return
-          </span>
-          <div className="ff__grid">
-            {Array.from({ length: 21 }, (_, i) => (
-              <i key={i}>{i + 1}</i>
-            ))}
-          </div>
-        </div>
-      );
-    case "length":
-      return (
-        <div className="ff ff--row">
-          <span className="ff__label">Trip length</span>
-          <span className="ff__stepper">
-            <Minus /> <b>— nights</b> <Plus />
-          </span>
-        </div>
-      );
-    case "flex":
-      return (
-        <div className="ff ff--row">
-          <span className="ff__label">Flexible dates ± 3 days</span>
-          <i className="ff__switch" />
-        </div>
-      );
-    case "pax":
-      return (
-        <div className="ff ff--field">
-          <span className="ff__label">Travelers &amp; class</span>
-          <span className="ff__input">
-            <Users />1 adult, Economy <ChevronDown />
-          </span>
-        </div>
-      );
-    case "budget":
-      return (
-        <div className="ff ff--range">
-          <span className="ff__label">Max price</span>
-          <span className="ff__track">
-            <i />
-          </span>
-        </div>
-      );
-    case "stops":
-      return (
-        <div className="ff ff--chips">
-          <span className="ff__label">Stops</span>
-          <span>
-            <em>Nonstop</em>
-            <em>1 stop</em>
-            <em>2+</em>
-          </span>
-        </div>
-      );
-    case "sort":
-      return (
-        <div className="ff ff--row">
-          <span className="ff__label">Sort by</span>
-          <span className="ff__select">
-            Recommended <ChevronDown />
-          </span>
-        </div>
-      );
-    case "tabs":
-      return (
-        <div className="ff ff--tabs">
-          <span>
-            <Search /> Flights · results
-          </span>
-          <span>Compare (3)</span>
-          <span>Flights · new dates</span>
-          <b>+</b>
-        </div>
-      );
-  }
-}
+import type { Turn } from "./scripts";
 
 /* ---------- Typed sentence with phrases that light up as their fields are replaced ---------- */
 

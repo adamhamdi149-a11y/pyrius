@@ -2,17 +2,20 @@
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
-import { ArrowRight, ArrowUp, Bell, BookmarkCheck, Check, Hotel, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUp, Bell, BookmarkCheck, Hotel } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LiveOrb } from "@/components/ai/LiveOrb";
+import { OrbThemePicker } from "@/components/settings/OrbThemePicker";
 import { Price } from "@/components/ui/Price";
 import type { OrbMood } from "@/lib/motion";
 import { savePendingPrompt } from "@/lib/pendingPrompt";
 import { demoCars, demoFlights, demoHotels } from "@/lib/providers/demo";
 import { sampleHistory, suggestedTarget } from "@/lib/tracking/simulator";
-import { ConversationView, FragmentView, MkCarCard, MkChart, MkFlightCard, MkHotelCard, TypedSentence } from "./parts";
+import { FiltersProvider, FragmentView } from "./filters";
+import { ConversationView, MkCarCard, MkChart, MkFlightCard, MkHotelCard, TypedSentence } from "./parts";
+import { Compare, Faq, FinalCta, Pricing } from "./sections";
 import { FRAGMENTS, rangeLabel, SCRIPTS, scriptById } from "./scripts";
 import { carryDraft, DRAFT_KEY, useTryHref } from "./useTryHref";
 
@@ -34,6 +37,7 @@ export function Landing() {
   const root = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const orbEl = useRef<HTMLDivElement>(null);
+  const fragWrap = useRef<HTMLDivElement>(null);
   const lenisRef = useRef<Lenis | null>(null);
 
   const [scriptId, setScriptId] = useState<(typeof SCRIPTS)[number]["id"]>("japan");
@@ -178,6 +182,8 @@ export function Landing() {
         const HERO = () => (desktop ? { x: W() * 0.21, y: H() * 0.04, k: s(Math.min(W() * 0.34, H() * 0.6, 520)) } : { x: 0, y: -H() * 0.23, k: s(Math.min(W() * 0.5, 230)) });
         const MID = () => (desktop ? { x: 0, y: -H() * 0.06, k: s(Math.min(W() * 0.2, H() * 0.36, 340)) } : { x: 0, y: H() * 0.08, k: s(W() * 0.38) });
         const CALM = () => (desktop ? { x: 0, y: -H() * 0.12, k: s(Math.min(W() * 0.22, H() * 0.38, 360)) } : { x: 0, y: -H() * 0.12, k: s(W() * 0.46) });
+        const COLOR = () => (desktop ? { x: 0, y: H() * 0.17, k: s(Math.min(W() * 0.24, H() * 0.38, 360)) } : { x: 0, y: H() * 0.2, k: s(Math.min(W() * 0.52, H() * 0.3)) });
+        const OUT = () => ({ x: 0, y: -H() * 0.62, k: CALM().k * 0.6 });
         const END = () => (desktop ? { x: 0, y: -H() * 0.31, k: s(Math.min(W() * 0.14, H() * 0.2, 220)) } : { x: 0, y: -H() * 0.33, k: s(Math.min(W() * 0.26, H() * 0.14)) });
         const DOCK = () => {
           const dock = document.querySelector<HTMLElement>(".mkf-dock");
@@ -192,14 +198,58 @@ export function Landing() {
           return { x: r.left + r.width / 2 - W() / 2, y: r.top - sr.top + r.height / 2 - H() / 2, k: s(r.height * 1.05) };
         };
         const frags = gsap.utils.toArray<HTMLElement>(".mkf-frag");
-        const fragPos = (el: HTMLElement) => {
+        const basePos = (el: HTMLElement) => {
           const f = FRAGMENTS.find((x) => x.key === el.dataset.k)!;
           return desktop ? { x: (f.x / 100) * W(), y: (f.y / 100) * H() } : { x: (f.mx / 100) * W(), y: (f.my / 100) * H() };
         };
+        // Each scene gets its own arrangement: every piece keeps roughly its place around the orb
+        // but is moved (closer, further, or a little round) until it clears the copy, the header,
+        // the screen edges and the other pieces. A piece with no room sits that scene out.
+        type Box = { l: number; r: number; t: number; b: number };
+        const hit = (p: Box, q: Box) => p.l < q.r && p.r > q.l && p.t < q.b && p.b > q.t;
+        const pad = (r: DOMRect, dy: number, m = 16): Box => ({ l: r.left - m, r: r.right + m, t: r.top + dy - m, b: r.bottom + dy + m });
+        const headerZone: Box = { l: 0, r: W(), t: 0, b: desktop ? 86 : 74 };
+        const layout = (center: { x: number; y: number }, ks: number[], zones: Box[]) => {
+          const out = new Map<HTMLElement, { x: number; y: number }>();
+          const taken: Box[] = [];
+          const items = frags
+            .filter((el) => getComputedStyle(el).display !== "none")
+            .map((el) => ({ el, ff: el.querySelector<HTMLElement>(".ff")! }))
+            .map((i) => ({ ...i, w: i.ff.offsetWidth, h: i.ff.offsetHeight }))
+            .sort((p, q) => q.w * q.h - p.w * p.h);
+          for (const { el, w, h } of items) {
+            const base = basePos(el);
+            search: for (const k of ks) {
+              for (const deg of [0, 10, -10, 20, -20, 32, -32]) {
+                const t = (deg * Math.PI) / 180;
+                const x = (base.x * Math.cos(t) - base.y * Math.sin(t)) * k;
+                const y = (base.x * Math.sin(t) + base.y * Math.cos(t)) * k;
+                const cx = W() / 2 + center.x + x;
+                const cy = H() / 2 + center.y + y;
+                const r = { l: cx - w / 2 - 6, r: cx + w / 2 + 6, t: cy - h / 2 - 6, b: cy + h / 2 + 6 };
+                if (r.l < 8 || r.r > W() - 8 || r.t < 0 || r.b > H() - 4) continue;
+                if (zones.some((z) => hit(r, z)) || taken.some((z) => hit(r, z))) continue;
+                out.set(el, { x, y });
+                taken.push(r);
+                break search;
+              }
+            }
+          }
+          return out;
+        };
+        const heroZones = [headerZone, ...[...document.querySelectorAll(".mkf-hero__copy > *")].map((n) => pad(n.getBoundingClientRect(), window.scrollY))];
+        const howTop = document.getElementById("how")!.getBoundingClientRect().top;
+        const howZones = [headerZone, ...[...document.querySelectorAll(".mkf-how__copy, .mkf-composer")].map((n) => pad(n.getBoundingClientRect(), -howTop))];
+        const heroAt = layout(HERO(), desktop ? [0.72, 0.66, 0.8, 0.6, 0.88, 0.54, 0.96] : [0.9, 0.84, 0.96, 0.78, 1.02, 0.72], heroZones);
+        const howAt = layout(MID(), [1, 1.06, 0.94, 1.12, 0.88, 1.2, 0.82, 1.3, 0.74], howZones);
+        const fragPos = (el: HTMLElement) => howAt.get(el) ?? basePos(el);
         frags.forEach((el) => {
           const p = fragPos(el);
+          const h = heroAt.get(el) ?? p;
           el.style.setProperty("--fx", `${p.x}px`);
           el.style.setProperty("--fy", `${p.y}px`);
+          el.style.setProperty("--hx", `${h.x}px`);
+          el.style.setProperty("--hy", `${h.y}px`);
         });
 
         // ===== PINNED SCENES FIRST (creation order = refresh order) =====
@@ -210,6 +260,7 @@ export function Landing() {
         const howTl = gsap.timeline({
           defaults: { ease: "none" },
           scrollTrigger: {
+            id: "how",
             trigger: "#how",
             start: "top top",
             end: () => `+=${H() * 2.3}`,
@@ -278,6 +329,10 @@ export function Landing() {
           const svg = document.querySelector<SVGSVGElement>(".mkf-route")!;
           const len = path.getTotalLength();
           const chart = document.querySelector<SVGPathElement>(".mkf-journey .mk-chart__line");
+          const placeSat = (p: number) => {
+            const pt = path.getPointAtLength(len * p);
+            sat.style.transform = `translate3d(${pt.x * (svg.clientWidth / 3000)}px, ${pt.y * (svg.clientHeight / 600)}px, 0)`;
+          };
           gsap.to(track, {
             x: () => -(track.scrollWidth - W()),
             ease: "none",
@@ -288,64 +343,71 @@ export function Landing() {
               pin: true,
               scrub: 0.8,
               invalidateOnRefresh: true,
+              onRefresh: (self) => placeSat(self.progress),
               onUpdate: (self) => {
                 const p = self.progress;
-                const pt = path.getPointAtLength(len * p);
-                const sx = svg.clientWidth / 3000;
-                const sy = svg.clientHeight / 600;
-                sat.style.transform = `translate3d(${pt.x * sx}px, ${pt.y * sy}px, 0)`;
+                placeSat(p);
                 if (chart) chart.style.strokeDashoffset = String(1 - gsap.utils.clamp(0, 1, (p - 0.38) / 0.24));
               },
             },
           });
         }
 
+        // #color — the orb holds still while the visitor picks its color
+        const colorST = ScrollTrigger.create({ trigger: "#color", start: "top top", end: () => `+=${H() * 0.9}`, pin: true, invalidateOnRefresh: true });
+        const C = () => colorST.start;
+
         // ===== AMBIENT: the orb's journey (created after the pins) =====
         type Station = () => { x: number; y: number; k: number };
         type Span = Pick<ScrollTrigger.Vars, "trigger" | "start" | "end">;
         const set = (o: { x: number; y: number; k: number }) => ({ x: o.x, y: o.y });
-        gsap.set(wrap.current, set(HERO()));
+        // The form pieces live in their own layer above the orb, so they can be used; it moves with it.
+        const movers = [wrap.current, fragWrap.current];
+        gsap.set(movers, set(HERO()));
         gsap.set(orbEl.current, { scale: HERO().k });
         const leg = (span: Span, from: Station, to: Station) => {
           const st = { ...span, scrub: 0.8, invalidateOnRefresh: true };
-          gsap.fromTo(wrap.current, { x: () => from().x, y: () => from().y }, { x: () => to().x, y: () => to().y, ease: "none", immediateRender: false, scrollTrigger: st });
+          gsap.fromTo(movers, { x: () => from().x, y: () => from().y }, { x: () => to().x, y: () => to().y, ease: "none", immediateRender: false, scrollTrigger: st });
           gsap.fromTo(orbEl.current, { scale: () => from().k }, { scale: () => to().k, ease: "none", immediateRender: false, scrollTrigger: { ...st }, onUpdate: function () {
             const k = Number(gsap.getProperty(orbEl.current, "scale"));
             setOrbScale((prev) => (Math.abs(prev - k) > 0.12 ? Math.round(k * 8) / 8 : prev));
           } });
         };
-        // The form pieces start gathered round the orb and open out as it moves to centre.
-        // Any piece that would sit on the hero copy waits until the orb has moved.
+        // The pieces move from their hero places to their scene places as the orb moves to centre,
+        // and the ones that only fit one of the two fade in or out on the way.
         const fragBox = root.current!.querySelector<HTMLElement>(".mkf-frags")!;
-        const heroSpread = desktop ? 0.72 : 0.9;
-        gsap.set(fragBox, { "--spread": heroSpread });
-        if (window.scrollY < H() * 0.5) {
-          const copy = gsap.utils.toArray<HTMLElement>(".mkf-hero__copy > *").map((el) => {
-            const r = el.getBoundingClientRect();
-            return { l: r.left - 20, r: r.right + 20, t: r.top + window.scrollY - 20, b: r.bottom + window.scrollY + 20 };
-          });
-          frags.forEach((el) => {
-            const ff = el.querySelector<HTMLElement>(".ff");
-            if (!ff) return;
-            const r = ff.getBoundingClientRect();
-            if (!copy.some((c) => r.left < c.r && r.right > c.l && r.top < c.b && r.bottom > c.t)) return;
-            gsap.fromTo(ff, { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", scrollTrigger: { trigger: "#how", start: "top 70%", end: "top 15%", scrub: 0.6 } });
-          });
-        }
-        gsap.fromTo(fragBox, { "--spread": heroSpread }, { "--spread": 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#how", start: "top bottom", end: "top top", scrub: 0.8 } });
+        gsap.set(fragBox, { "--t": 0 });
+        gsap.fromTo(fragBox, { "--t": 0 }, { "--t": 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#how", start: "top bottom", end: "top top", scrub: 0.8 } });
+        const into = { trigger: "#how", start: "top 70%", end: "top 15%", scrub: 0.6 };
+        frags.forEach((el) => {
+          const ff = el.querySelector<HTMLElement>(".ff");
+          if (!ff) return;
+          const inHero = heroAt.has(el);
+          const inHow = howAt.has(el);
+          if (!inHero && !inHow) gsap.set(ff, { autoAlpha: 0 });
+          else if (!inHero) gsap.fromTo(ff, { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", scrollTrigger: { ...into } });
+          else if (!inHow) gsap.fromTo(ff, { autoAlpha: 1 }, { autoAlpha: 0, ease: "none", immediateRender: false, scrollTrigger: { ...into } });
+        });
         leg({ trigger: "#how", start: "top bottom", end: "top top" }, HERO, MID);
 
         // The app rises while the orb travels into its composer, then hands over to the small orb.
         gsap.fromTo(".mkf-product__copy > *", { autoAlpha: 0, y: 28 }, { autoAlpha: 1, y: 0, stagger: 0.1, ease: "power2.out", scrollTrigger: { start: () => P() - H() * 0.8, end: () => P() - H() * 0.1, scrub: 0.6, invalidateOnRefresh: true } });
         gsap.fromTo(".mkf-app", { autoAlpha: 0, y: 80, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, ease: "power2.out", scrollTrigger: { start: () => P() - H() * 0.85, end: () => P() - H() * 0.05, scrub: 0.6, invalidateOnRefresh: true } });
         leg({ start: () => P() - H(), end: () => P() }, MID, DOCK);
-        const handoff = { start: () => P() - H() * 0.04, end: () => P() + H() * 0.08, scrub: 0.8, invalidateOnRefresh: true };
+        const handoff = { start: () => P() - H() * 0.04, end: () => P() + H() * 0.08, scrub: true, invalidateOnRefresh: true };
         gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 1 }, { autoAlpha: 0, ease: "none", immediateRender: false, scrollTrigger: handoff });
         gsap.fromTo(".mkf-dock-orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", scrollTrigger: { ...handoff } });
 
-        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#calm", start: "top bottom", end: "top 30%", scrub: true } });
-        leg({ trigger: "#calm", start: "top bottom", end: "top top" }, () => ({ ...CALM(), y: H() * 0.5 }), CALM);
-        leg({ trigger: "#start", start: "top bottom", end: "top top" }, CALM, END);
+        // It returns for the color scene, then settles over the calm line.
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { start: () => C() - H() * 0.9, end: () => C() - H() * 0.25, scrub: true, invalidateOnRefresh: true } });
+        leg({ start: () => C() - H(), end: () => C() }, () => ({ ...COLOR(), y: H() * 0.55 }), COLOR);
+        leg({ trigger: "#calm", start: "top bottom", end: "top top" }, COLOR, CALM);
+
+        // Out of the way for pricing, the comparison and the FAQ; back for the final call.
+        leg({ trigger: "#pricing", start: "top bottom", end: "top 20%" }, CALM, OUT);
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 1 }, { autoAlpha: 0, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#pricing", start: "top 75%", end: "top 25%", scrub: true } });
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#start", start: "top bottom", end: "top 30%", scrub: true } });
+        leg({ trigger: "#start", start: "top bottom", end: "top top" }, () => ({ ...END(), y: H() * 0.55 }), END);
 
         // At the end the orb travels up with the page as the footer arrives.
         // The footer sits outside this component's scope, so pass the element itself.
@@ -441,6 +503,12 @@ export function Landing() {
       sessionStorage.setItem(DRAFT_KEY, sc.sentence);
     } catch {}
   };
+  const updateDraft = (v: string) => {
+    setDraft(v);
+    try {
+      sessionStorage.setItem(DRAFT_KEY, v);
+    } catch {}
+  };
   const go = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (draft.trim()) savePendingPrompt(draft);
@@ -464,15 +532,6 @@ export function Landing() {
               <LiveOrb mood={mood} displayScale={orbScale} maxBuffer={1100} />
             </div>
           </div>
-          <div className="mkf-frags">
-            {FRAGMENTS.map((f) => (
-              <div key={f.key} className="mkf-frag" data-k={f.key} data-mobile={f.mobile} style={{ ["--d" as string]: f.depth }}>
-                <div className="mkf-frag__drift">
-                  <FragmentView k={f.key} />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -493,12 +552,7 @@ export function Landing() {
             <input
               id="mk-trip"
               value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                try {
-                  sessionStorage.setItem(DRAFT_KEY, e.target.value);
-                } catch {}
-              }}
+              onChange={(e) => updateDraft(e.target.value)}
               placeholder="Describe your trip…"
               autoComplete="off"
               maxLength={300}
@@ -518,6 +572,23 @@ export function Landing() {
           <p className="mkf-hero__note">Free to start. Whatever you write here is waiting for you in Pyrius after you sign up.</p>
         </div>
       </section>
+
+      {/* The old search form, in working pieces. Above the orb, below the copy; it moves with the orb. */}
+      <div className="mkf-fraglayer" role="group" aria-label="Search filters">
+        <div className="mkf-fragwrap" ref={fragWrap}>
+          <FiltersProvider>
+            <div className="mkf-frags">
+              {FRAGMENTS.map((f) => (
+                <div key={f.key} className="mkf-frag" data-k={f.key} data-mobile={f.mobile} style={{ ["--d" as string]: f.depth }}>
+                  <div className="mkf-frag__drift">
+                    <FragmentView k={f.key} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </FiltersProvider>
+        </div>
+      </div>
 
       {/* ===== 2. From search to conversation ===== */}
       <section className="mkf-how" id="how" aria-labelledby="how-a">
@@ -663,58 +734,36 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="mkf-band mkf-rise" aria-label="Try Pyrius">
-        <p>See what Pyrius does with your trip.</p>
-        <Link href={tryHref} className="mk-btn mk-btn--primary" onClick={carryDraft}>
-          Try Pyrius
-          <ArrowRight />
-        </Link>
+      {/* ===== 5. Make it yours ===== */}
+      <section className="mkf-color" id="color" aria-labelledby="color-title">
+        <div className="mkf-color__top">
+          <h2 id="color-title" className="mkf-color__title">
+            See what Pyrius does with your trip.
+          </h2>
+          <Link href={tryHref} className="mk-btn mk-btn--primary" onClick={carryDraft}>
+            Try Pyrius
+            <ArrowRight />
+          </Link>
+        </div>
+        <div className="mkf-color__pick">
+          <OrbThemePicker preview={staticMode} />
+          <p className="mkf-color__hint">Pick a color. The whole app follows.</p>
+        </div>
       </section>
 
-      {/* ===== 5. The new mindset ===== */}
+      {/* ===== 6. The new mindset ===== */}
       <section className="mkf-calm" id="calm" aria-labelledby="calm-title">
         <h2 id="calm-title" className="mkf-calm__title mkf-rise">
-          Planning starts with a <em>conversation.</em>
+          Less searching. <em>More going.</em>
         </h2>
         <p className="mkf-rise">One sentence instead of a form.</p>
       </section>
 
-      {/* ===== 6. Conversion ===== */}
-      <section className="mkf-start" id="start" aria-labelledby="start-title">
-        <div className="mkf-start__inner mkf-rise">
-          <h2 id="start-title" className="mkf-start__title">
-            Your next trip starts with a <em>conversation.</em>
-          </h2>
-          <p>Create your free account, tell Pyrius where you&apos;d like to go, and it takes it from there. Bookings happen with the airline or site you choose.</p>
-          <div className="mkf-start__ctas">
-            <Link href={tryHref} className="mk-btn mk-btn--primary mk-btn--lg" onClick={carryDraft}>
-              <Sparkles />
-              Try Pyrius
-            </Link>
-            <a
-              href="#how"
-              className="mk-btn mk-btn--ghost mk-btn--lg"
-              onClick={(e) => {
-                e.preventDefault();
-                window.dispatchEvent(new CustomEvent("mk:goto", { detail: "how" }));
-              }}
-            >
-              See how it works
-            </a>
-          </div>
-          <ul className="mkf-start__facts">
-            <li>
-              <Check /> Free plan
-            </li>
-            <li>
-              <Check /> Book directly with providers
-            </li>
-            <li>
-              <Check /> Your data stays yours
-            </li>
-          </ul>
-        </div>
-      </section>
+      {/* ===== 7. Plans, the obvious choice, questions, and the last word ===== */}
+      <Pricing tryHref={tryHref} />
+      <Compare tryHref={tryHref} />
+      <Faq />
+      <FinalCta draft={draft} onDraft={updateDraft} onSubmit={go} />
       {!ready && <span className="sr-only">Loading</span>}
     </div>
   );

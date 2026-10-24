@@ -9,8 +9,9 @@ import { useStore } from "@/lib/store/AppStore";
  * [‹] [ Theme name ] [›] — cycles the orb colour theme with wraparound.
  * The live orb above it is the real renderer, so the change is shown, not described.
  * Selection is conveyed by name, position ("2 of 3") and dot shape, not colour alone.
+ * `preview={false}` drops the small orb where a larger one on the page shows the change.
  */
-export function OrbThemePicker() {
+export function OrbThemePicker({ preview = true }: { preview?: boolean }) {
   const { settings, updateSettings, ready } = useStore();
   const [dir, setDir] = useState<1 | -1>(1);
   const theme = orbThemeById(settings.orbTheme);
@@ -23,9 +24,11 @@ export function OrbThemePicker() {
 
   return (
     <div className="orbpick" data-ready={ready}>
-      <div className="orbpick__stage">
-        <LiveOrb mood="idle" />
-      </div>
+      {preview && (
+        <div className="orbpick__stage">
+          <LiveOrb mood="idle" />
+        </div>
+      )}
 
       <div
         className="orbpick__ctrl"
