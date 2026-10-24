@@ -402,11 +402,11 @@ export function Landing() {
 
         // It rises in well below the color picker, then settles alone in the centre of the screen
         // as the copy and picker scroll away, and finally lifts over the calm line.
-        // While the CTA has the screen to itself the orb waits below it; scrolling on, it rises with the
-        // picker (same distance, same pace) so the two arrive together, never overlapping.
-        const colorTravel = () => (document.getElementById("color")?.offsetHeight ?? H() * 2) - H();
-        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#color", start: "top top", end: "top -30%", scrub: true } });
-        leg({ trigger: "#color", start: "top top", end: "bottom bottom" }, () => ({ ...ALONE(), y: ALONE().y + colorTravel() }), ALONE);
+        // The orb scrolls with the picker as if it were part of the page (same distance, same pace), so it
+        // peeks in under the picker on the CTA screen and the two settle in the centre together.
+        const colorTravel = () => document.getElementById("color")?.offsetHeight ?? H() * 1.5;
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#color", start: "top 85%", end: "top 35%", scrub: true } });
+        leg({ trigger: "#color", start: "top bottom", end: "bottom bottom" }, () => ({ ...ALONE(), y: ALONE().y + colorTravel() }), ALONE);
         leg({ trigger: "#calm", start: "top bottom", end: "top top" }, ALONE, CALM);
 
         // Out of the way for pricing, the comparison and the FAQ; back for the final call.
