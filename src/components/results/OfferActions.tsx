@@ -3,6 +3,7 @@ import { Bell, BellRing, Bookmark, BookmarkCheck, ExternalLink } from "lucide-re
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { TrackDialog } from "@/components/tracking/TrackDialog";
+import { BookingDialog } from "./BookingDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
 import type { AnyOffer } from "@/lib/types";
@@ -22,16 +23,20 @@ export function OfferActions({
   conversationId,
   onSaved,
   compact,
+  onExpired,
 }: {
   offer: AnyOffer;
   conversationId?: string;
   onSaved?: (kind: AnyOffer["kind"]) => void;
   compact?: boolean;
+  /** Called when the user tries to book an offer that has expired, so the results can refresh. */
+  onExpired?: () => void;
 }) {
   const store = useStore();
   const toast = useToast();
   const router = useRouter();
   const [trackOpen, setTrackOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
   const saved = store.isSaved(offer.offer.id);
   const tracker = store.trackerFor(offer.offer.id);
   const loc = store.settings.locale;
@@ -56,8 +61,11 @@ export function OfferActions({
     onSaved?.(offer.kind);
   };
 
+  // A live flight has a booking path for that exact itinerary. Anything else only gets a route search,
+  // and says so: it is never presented as the offer's checkout page.
+  const bookable = offer.kind === "flight" && offer.offer.source === "live" && offer.offer.booking ? offer.offer : null;
   const url = offer.offer.bookingUrl ?? offer.offer.searchUrl;
-  const external = offer.offer.bookingUrl ? "View offer" : `Check on ${PROVIDER_NAME[offer.kind]}`;
+  const external = offer.offer.bookingUrl ? "View offer" : `Search on ${PROVIDER_NAME[offer.kind]}`;
 
   return (
     <div className={cx("offer-actions", compact && "offer-actions--compact")}>
@@ -69,16 +77,24 @@ export function OfferActions({
         {tracker ? <BellRing /> : <Bell />}
         <span>{tracker ? store.t("common.tracking") : store.t("common.track")}</span>
       </button>
-      <a
-        className="btn btn--secondary btn--sm offer-actions__out"
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={offer.offer.bookingUrl ? "Continue to the provider to book" : `Opens a general ${PROVIDER_NAME[offer.kind]} search with your trip details. Prices there are live and will differ from this demo.`}
-      >
-        {external}
-        <ExternalLink />
-      </a>
+      {bookable ? (
+        <button className="btn btn--primary btn--sm offer-actions__out" onClick={() => setBookOpen(true)} title="See who sells this itinerary and continue to their booking page">
+          Book
+          <ExternalLink />
+        </button>
+      ) : (
+        <a
+          className="btn btn--secondary btn--sm offer-actions__out"
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={offer.offer.bookingUrl ? "Continue to the provider to book" : `Opens a ${PROVIDER_NAME[offer.kind]} search for these dates and places — not this exact offer.`}
+        >
+          {external}
+          <ExternalLink />
+        </a>
+      )}
+      {bookable && <BookingDialog offer={bookable} open={bookOpen} onClose={() => setBookOpen(false)} onExpired={onExpired} />}
 
       <TrackDialog
         open={trackOpen}
@@ -106,8 +122,11 @@ export function OfferActions({
           if (!r.ok) return limitToast(r.message);
           toast({
             tone: "success",
-            title: tracker ? "Target updated" : "Tracking started (simulated)",
-            description: `We'll flag it at ${money(target, offer.offer.currency, loc)} or less.`,
+            title: tracker ? "Target updated" : offer.offer.source === "live" ? "Saved with a target price" : "Tracking started (simulated)",
+            description:
+              offer.offer.source === "live"
+                ? `Target ${money(target, offer.offer.currency, loc)}. Search again any time to see the current fare.`
+                : `We'll flag it at ${money(target, offer.offer.currency, loc)} or less.`,
             action: { label: "Open", onClick: () => router.push("/tracking") },
           });
           if (!wasSaved) onSaved?.(offer.kind);

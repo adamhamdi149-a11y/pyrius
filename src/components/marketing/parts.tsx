@@ -166,13 +166,13 @@ export function MkFlightCard({ f, best, saved, compact }: { f: FlightOffer; best
       {!compact && (
         <div className="fcard__foot">
           <div className="fcard__facts">
-            <span className={cx("fact", !f.baggage.carryOn && "fact--off")}>
+            <span className={cx("fact", !f.baggage?.carryOn && "fact--off")}>
               <Briefcase />
-              {f.baggage.carryOn ? "Carry-on included" : "No carry-on"}
+              {f.baggage?.carryOn ? "Carry-on included" : "No carry-on"}
             </span>
-            <span className={cx("fact", !f.baggage.checked && "fact--off")}>
+            <span className={cx("fact", !f.baggage?.checked && "fact--off")}>
               <Luggage />
-              {f.baggage.checked ? `${f.baggage.checked} checked bag` : "No checked bag"}
+              {f.baggage?.checked ? `${f.baggage.checked} checked bag` : "No checked bag"}
             </span>
           </div>
           <div className="offer-actions" aria-hidden="true">

@@ -80,23 +80,55 @@ export interface FlightSegment {
   stops: number;
   stopCodes: string[];
   flightNumber: string;
+  /** Individual flights, when the provider gives them. */
+  legs?: { flightNumber: string; airline: string; from: string; to: string; depart: string; arrive: string; durationMin: number; aircraft?: string }[];
+}
+
+/** How a live offer is booked. Tokens are the provider's own and are only sent back to it, server-side. */
+export interface FlightBookingRef {
+  provider: "serpapi";
+  /** Round trip: picks the return flight first. */
+  departureToken?: string;
+  /** Lists who sells this exact itinerary. */
+  bookingToken?: string;
+  params: FlightSearchParams;
 }
 
 export interface FlightOffer {
   id: string;
   source: DataSource;
   provider: string;
-  airline: { code: string; name: string; color: string };
+  airline: { code: string; name: string; color: string; logo?: string };
   outbound: FlightSegment;
   inbound?: FlightSegment;
-  cabin: "Economy" | "Premium Economy";
-  baggage: { carryOn: boolean; checked: number };
+  cabin: "Economy" | "Premium Economy" | "Business" | "First";
+  /** Unknown for providers that don't report it per offer. */
+  baggage?: { carryOn: boolean; checked: number };
   totalPrice: number;
   pricePerTraveler: number;
   currency: Currency;
   travelers: number;
+  /** Round trip or one way, for the price shown. */
+  tripType?: "round" | "oneway";
+  /** Round-trip price whose return flight is chosen in the booking step. */
+  returnPending?: boolean;
+  booking?: FlightBookingRef;
+  /** When the provider returned this offer, and when it should be treated as stale. */
+  fetchedAt?: string;
+  expiresAt?: string;
+  notes?: string[];
+  /** Fare facts as the provider states them, e.g. "Checked baggage for a fee". */
+  conditions?: string[];
   bookingUrl?: string; // set only for real, configured providers
   searchUrl: string; // legitimate general search link with the search parameters
+}
+
+/** One completed flight search, stored with the reply so the cards show exactly what was found. */
+export interface FlightSnapshot {
+  offers: FlightOffer[];
+  source: DataSource;
+  provider: string;
+  fetchedAt: string;
 }
 
 export interface HotelSearchParams {
@@ -249,6 +281,7 @@ export type Attachment =
       params: FlightSearchParams;
       budget?: number;
       filters?: { nonstopOnly?: boolean; carryOnOnly?: boolean; sort?: "price" | "duration" | "depart" };
+      snapshot?: FlightSnapshot;
     }
   | { type: "hotels"; params: HotelSearchParams; budgetPerNight?: number }
   | { type: "cars"; params: CarSearchParams }
@@ -263,14 +296,21 @@ export interface ChatMessage {
   attachment?: Attachment;
   /** Replies from the AI concierge can carry several result sets (e.g. hotels and cars). */
   attachments?: Attachment[];
+  /** Web pages the AI consulted for this reply. */
+  sources?: WebSource[];
+}
+
+export interface WebSource {
+  title: string;
+  url: string;
 }
 
 export const messageAttachments = (m: Pick<ChatMessage, "attachment" | "attachments">): Attachment[] => m.attachments ?? (m.attachment ? [m.attachment] : []);
 
 /** Changes the AI asked for that the client applies through its own store (validated on the server first). */
 export type ClientAction =
-  | { type: "save"; offer: AnyOffer }
-  | { type: "track"; offerId: string; offer?: AnyOffer; targetPrice: number };
+  | { type: "save"; offerId: string; kind: OfferKind; offer?: AnyOffer }
+  | { type: "track"; offerId: string; kind: OfferKind; offer?: AnyOffer; targetPrice: number };
 
 export type AgentStage =
   | "collecting"
@@ -299,6 +339,7 @@ export interface AgentReply {
   attachment?: Attachment;
   attachments?: Attachment[];
   actions?: ClientAction[];
+  sources?: WebSource[];
   title?: string;
   engine: "demo" | "openai";
 }

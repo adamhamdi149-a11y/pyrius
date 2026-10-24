@@ -2,6 +2,7 @@
 import { ArrowDownRight, ArrowUpRight, Bell, BellOff, BellRing, Car, ExternalLink, Hotel, Maximize2, Minus, Pause, Plane, Play, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { CarCard } from "@/components/results/CarResults";
+import { BookingDialog } from "@/components/results/BookingDialog";
 import { FlightCard } from "@/components/results/FlightResults";
 import { HotelCard } from "@/components/results/HotelResults";
 import { PriceChart } from "@/components/tracking/PriceChart";
@@ -89,8 +90,10 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
   const store = useStore();
   const toast = useToast();
   const [track, setTrack] = useState(false);
+  const [book, setBook] = useState(false);
   const loc = store.settings.locale;
   const o = item.data;
+  const bookable = o.kind === "flight" && o.offer.source === "live" && o.offer.booking ? o.offer : null;
   const d = describeOffer(o, loc);
   const tracker = store.trackerFor(item.id);
   const price = tracker?.lastKnownPrice ?? o.offer.totalPrice;
@@ -135,9 +138,23 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
         <button className={cx("icon-btn", tracker && "icon-btn--on")} onClick={() => setTrack(true)} aria-label={tracker ? "Edit tracking" : "Track price"} title={tracker ? "Edit tracking" : "Track price"}>
           {tracker ? <BellRing /> : <Bell />}
         </button>
-        <a className="icon-btn" href={url} target="_blank" rel="noopener noreferrer" aria-label="Check with the provider (opens in a new tab)" title="Check with the provider">
-          <ExternalLink />
-        </a>
+        {bookable ? (
+          <button className="icon-btn" onClick={() => setBook(true)} aria-label="Book this flight" title="Book: see who sells it">
+            <ExternalLink />
+          </button>
+        ) : (
+          <a
+            className="icon-btn"
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={o.offer.bookingUrl ? "Continue to the provider (opens in a new tab)" : "Search these dates and places (opens in a new tab; not this exact offer)"}
+            title={o.offer.bookingUrl ? "Continue to the provider" : "Search these dates and places — not this exact offer"}
+          >
+            <ExternalLink />
+          </a>
+        )}
+        {bookable && <BookingDialog offer={bookable} open={book} onClose={() => setBook(false)} />}
         <button className="icon-btn" onClick={remove} aria-label={`Remove ${d.title}`} title="Remove">
           <Trash2 />
         </button>
@@ -227,7 +244,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <StatusBadge t={t} />
-          {t.source === "demo" && <DemoBadge label="Simulated prices" />}
+          {t.source === "demo" ? <DemoBadge label="Simulated prices" /> : <span className="badge badge--live">Live fare</span>}
         </div>
         <div className="tcard__stats">
           <div className="stat">
@@ -235,7 +252,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
             <div className="stat__value num">{money(t.savedPrice, t.currency, loc)}</div>
           </div>
           <div className="stat">
-            <div className="stat__label">Now (simulated)</div>
+            <div className="stat__label">{t.source === "demo" ? "Now (simulated)" : "Last known"}</div>
             <div className="stat__value num">{money(t.lastKnownPrice, t.currency, loc)}</div>
           </div>
           <div className="stat stat--target">
@@ -244,7 +261,9 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
           </div>
         </div>
         <div className="t-meta">
-          Last simulated check {timeAgo(t.lastCheckedAt, loc)} · {t.history.length} data points
+          {t.source === "demo"
+            ? `Last simulated check ${timeAgo(t.lastCheckedAt, loc)} · ${t.history.length} data points`
+            : `Price from ${timeAgo(t.lastCheckedAt, loc)}. Automatic re-checks for live fares aren't running yet; search again to see the current fare.`}
         </div>
         <div className="tcard__actions">
           <button className="btn btn--secondary btn--sm" onClick={() => setEdit(true)}>

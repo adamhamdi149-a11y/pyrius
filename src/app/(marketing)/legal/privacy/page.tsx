@@ -127,6 +127,10 @@ const sections: LegalSection[] = [
             <strong>Resend</strong> — delivering account emails such as sign-up confirmations and sign-in links.
           </li>
           <li>
+            <strong>SerpApi</strong> — running flight searches on Google Flights. Only the search itself is sent (airports, dates, number of travelers and
+            currency), never your name, email or account details.
+          </li>
+          <li>
             <strong>Google and Apple</strong> — only if you choose to sign in with them.
           </li>
         </ul>
@@ -144,8 +148,8 @@ const sections: LegalSection[] = [
     body: (
       <p>
         Pyrius does not book travel or take payment for it. When you open an offer with an airline, a booking site or a rental company, you leave Pyrius and that
-        company&apos;s own terms and privacy policy apply. The links we open carry search details such as destinations, dates and number of travelers, not your name or
-        email address.
+        company&apos;s own terms and privacy policy apply. When you choose to book a flight, your browser goes through Google&apos;s booking redirect to the seller you
+        picked. The links and redirects we open carry the trip itself (flights, dates, number of travelers), not your name or email address.
       </p>
     ),
   },

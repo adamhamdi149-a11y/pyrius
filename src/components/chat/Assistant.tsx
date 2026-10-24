@@ -6,14 +6,16 @@ import { OrbStage } from "@/components/ai/OrbStage";
 import { CarResults, BusinessDirectory } from "@/components/results/CarResults";
 import { FlightResults } from "@/components/results/FlightResults";
 import { HotelResults } from "@/components/results/HotelResults";
+import { applyFlightFilters } from "@/components/results/FlightResults";
 import { offerTitle } from "@/components/results/OfferActions";
+import { flightBrief } from "@/lib/flights/brief";
+import { authHeaders } from "@/lib/authHeaders";
 import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
 import { airportByCode } from "@/lib/data/catalog";
 import type { MessageKey } from "@/lib/i18n";
 import { newConversation, useStore } from "@/lib/store/AppStore";
-import { getSupabase } from "@/lib/supabase/client";
-import { messageAttachments, type AgentReply, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type OfferKind, type TripPreferences } from "@/lib/types";
+import { messageAttachments, type AgentReply, type AnyOffer, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type OfferKind, type TripPreferences } from "@/lib/types";
 import { DURATION, stagger, type OrbMood } from "@/lib/motion";
 import { takePendingPrompt } from "@/lib/pendingPrompt";
 import { cx, formatRange, money, toISODate, uid } from "@/lib/utils";
@@ -36,7 +38,7 @@ const EXAMPLES = {
   fr: ["Un endroit chaud en février, moins de 800 $…", "Tokyo à deux au printemps…", "Un long week-end à Lisbonne depuis Toronto…", "Paris du 10 au 17 mars, vol direct…"],
 };
 
-let statusCache: Promise<{ ai: string }> | null = null;
+let statusCache: Promise<{ ai: string; flights?: "live" | "demo" | "none" }> | null = null;
 
 function OrbitBackdrop({ leaving }: { leaving: boolean }) {
   return (
@@ -67,6 +69,7 @@ export function Assistant() {
   const [typing, setTyping] = useState(false);
   const [listening, setListening] = useState(false);
   const [engine, setEngine] = useState<"demo" | "openai" | null>(null);
+  const [flightMode, setFlightMode] = useState<"live" | "demo" | "none" | null>(null);
   const [editing, setEditing] = useState<FlightSearchParams | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [draftPrefs, setDraftPrefs] = useState<QuickPrefs>({});
@@ -88,7 +91,12 @@ export function Assistant() {
 
   useEffect(() => {
     statusCache ??= fetch("/api/status").then((r) => r.json());
-    statusCache.then((s) => setEngine(s.ai === "openai" ? "openai" : "demo")).catch(() => setEngine("demo"));
+    statusCache
+      .then((s) => {
+        setEngine(s.ai === "openai" ? "openai" : "demo");
+        setFlightMode(s.flights ?? null);
+      })
+      .catch(() => setEngine("demo"));
   }, []);
 
   useEffect(() => {
@@ -189,9 +197,21 @@ export function Assistant() {
     const hotels = latest("hotels");
     const cars = latest("cars");
     const tracked = new Map(store.trackers.map((t) => [t.offerId, t]));
+    // The flight cards in the order they're shown, so "the second one" means the same thing to the AI.
+    const snap = flights?.snapshot;
+    const shown = snap
+      ? applyFlightFilters([...snap.offers], {
+          sort: flights.filters?.sort ?? "price",
+          stops: flights.filters?.nonstopOnly ? "0" : "any",
+          window: "any",
+          airlines: [],
+          maxPrice: null,
+          carryOn: Boolean(flights.filters?.carryOnOnly),
+        }).map((o, i) => flightBrief(o, i + 1))
+      : [];
     return {
       results: {
-        flights: flights && { params: flights.params, sort: flights.filters?.sort, nonstopOnly: flights.filters?.nonstopOnly, carryOnOnly: flights.filters?.carryOnOnly },
+        flights: flights && { params: flights.params, sort: flights.filters?.sort, source: snap?.source, fetchedAt: snap?.fetchedAt, shown },
         hotels: hotels?.params,
         cars: cars?.params,
       },
@@ -209,16 +229,28 @@ export function Assistant() {
     };
   };
 
+  // The exact offer the AI referred to: from the results stored with this conversation, or from saved offers.
+  const findOffer = (c: Conversation, id: string): AnyOffer | undefined => {
+    for (let i = c.messages.length - 1; i >= 0; i--) {
+      for (const a of messageAttachments(c.messages[i])) {
+        const hit = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+        if (hit) return { kind: "flight", offer: hit };
+      }
+    }
+    return store.saved.find((s) => s.id === id)?.data;
+  };
+
   // Saves and price tracking the AI asked for go through the same store as the Save and Track buttons.
-  const applyActions = (actions: ClientAction[] | undefined, conversationId: string) => {
+  const applyActions = (actions: ClientAction[] | undefined, c: Conversation) => {
+    const conversationId = c.id;
     for (const a of actions ?? []) {
+      const o = a.offer ?? findOffer(c, a.offerId);
+      if (!o) continue;
       if (a.type === "save") {
-        const r = store.saveOffer(a.offer, conversationId);
+        const r = store.saveOffer(o, conversationId);
         if (!r.ok) toast({ tone: "info", title: L("Plan limit reached", "Limite du forfait atteinte"), description: r.message });
-        else toast({ tone: "save", title: L("Saved to your offers", "Enregistré dans vos offres"), description: offerTitle(a.offer), action: { label: L("View", "Voir"), onClick: () => router.push("/saved") } });
+        else toast({ tone: "save", title: L("Saved to your offers", "Enregistré dans vos offres"), description: offerTitle(o), action: { label: L("View", "Voir"), onClick: () => router.push("/saved") } });
       } else {
-        const o = a.offer ?? store.saved.find((s) => s.id === a.offerId)?.data;
-        if (!o) continue;
         const r = store.startTracking(o, a.targetPrice, conversationId);
         if (!r.ok) toast({ tone: "info", title: L("Plan limit reached", "Limite du forfait atteinte"), description: r.message });
         else
@@ -239,12 +271,12 @@ export function Assistant() {
       setFlash(null);
       const started = Date.now();
       try {
-        const token = store.auth.mode === "cloud" ? (await getSupabase()?.auth.getSession())?.data.session?.access_token : undefined;
+        const auth = await authHeaders();
         // The newest message is the one being sent; earlier ones are the history.
         const earlier = c.messages.at(-1)?.role === "user" ? c.messages.slice(0, -1) : c.messages;
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          headers: { "Content-Type": "application/json", ...auth },
           body: JSON.stringify({
             message: text,
             action,
@@ -264,9 +296,9 @@ export function Assistant() {
         const reply: AgentReply = await res.json();
         await new Promise((r) => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
         const attachments = reply.attachments ?? (reply.attachment ? [reply.attachment] : undefined);
-        const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: reply.reply, chips: reply.chips, attachments, at: new Date().toISOString() };
+        const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: reply.reply, chips: reply.chips, attachments, sources: reply.sources, at: new Date().toISOString() };
         setEngine(reply.engine);
-        applyActions(reply.actions, c.id);
+        applyActions(reply.actions, c);
         // Calm success: a short pulse from the orb, then back to idle.
         setPulseKey((k) => k + 1);
         setFlash("success");
@@ -397,7 +429,11 @@ export function Assistant() {
         ? L("Couldn't reach Pyrius. Your message is kept — try again.", "Impossible de joindre Pyrius. Votre message est conservé — réessayez.")
         : flash === "success"
           ? L("Reply ready.", "Réponse prête.")
-          : L("Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.", "Pyrius suggère et compare; vous réservez toujours directement auprès du fournisseur. Les prix affichés sont des données de démonstration.");
+          : flightMode === "live"
+            ? L("Live fares from Google Flights. You always book directly with the airline or travel site.", "Tarifs en direct de Google Flights. Vous réservez toujours directement auprès de la compagnie ou du site de voyage.")
+            : flightMode === "none"
+              ? L("Pyrius suggests and compares. Live flight search isn't connected yet.", "Pyrius suggère et compare. La recherche de vols en direct n'est pas encore connectée.")
+              : L("Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.", "Pyrius suggère et compare; vous réservez toujours directement auprès du fournisseur. Les prix affichés sont des données de démonstration.");
 
   const modePill = engine && (
     <span className="mode-pill" data-live={engine === "openai"} title={engine === "openai" ? "Field extraction by your configured AI model. Offers always come from the travel provider." : t("chat.demoModeHint")}>

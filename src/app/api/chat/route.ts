@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { runAgent } from "@/lib/ai/agent";
 import { ConciergeError, runConcierge, type ConciergeRequest } from "@/lib/ai/concierge";
 import { allow } from "@/lib/ai/concierge/rateLimit";
+import { cleanFlightParams } from "@/lib/apiGate";
+import type { FlightBrief } from "@/lib/flights/brief";
 import type { SavedSummary } from "@/lib/ai/concierge/tools";
 import { AIRPORTS } from "@/lib/data/catalog";
 import { PLANS } from "@/lib/plans";
 import { getUserFromRequest } from "@/lib/supabase/server";
-import type { AgentStage, CarSearchParams, ChipAction, FlightSearchParams, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
+import type { AgentStage, CarSearchParams, ChipAction, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
 import { toISODate } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -71,22 +73,38 @@ function cleanTrip(p: unknown): TripPreferences {
 }
 
 function cleanFlights(v: unknown): ConciergeRequest["results"]["flights"] {
-  const f = v as { params?: Partial<FlightSearchParams>; sort?: string; nonstopOnly?: unknown; carryOnOnly?: unknown } | undefined;
-  const p = f?.params;
-  if (!p || !code(p.originCode) || !code(p.destinationCode) || !isDate(p.departDate)) return undefined;
+  const f = v as { params?: unknown; sort?: string; source?: string; fetchedAt?: string; shown?: unknown[] } | undefined;
+  const params = cleanFlightParams(f?.params);
+  if (!params) return undefined;
+  const str = (x: unknown, n = 200) => (typeof x === "string" ? x.slice(0, n) : "");
+  // Summaries of the cards on screen: text and numbers only, bounded, never instructions.
+  const shown: FlightBrief[] = (Array.isArray(f!.shown) ? f!.shown : []).slice(0, 30).flatMap((raw, i) => {
+    const b = raw as Record<string, unknown>;
+    if (!b || typeof b.id !== "string" || !/^[\w-]{3,80}$/.test(b.id)) return [];
+    return [{
+      n: i + 1,
+      id: b.id,
+      airline: str(b.airline, 80),
+      out: str(b.out),
+      back: typeof b.back === "string" ? str(b.back) : null,
+      price: numIn(b.price, 0, 1_000_000) ?? 0,
+      per_traveler: numIn(b.per_traveler, 0, 1_000_000) ?? 0,
+      currency: str(b.currency, 3) || "CAD",
+      cabin: str(b.cabin, 30),
+      bags: typeof b.bags === "string" ? str(b.bags, 80) : null,
+      stops: intIn(b.stops, 0, 10) ?? 0,
+      duration_min: intIn(b.duration_min, 0, 10000) ?? 0,
+      return_chosen_at_booking: b.return_chosen_at_booking === true,
+      notes: Array.isArray(b.notes) ? b.notes.filter((x): x is string => typeof x === "string").slice(0, 3).map((x) => x.slice(0, 120)) : [],
+      conditions: Array.isArray(b.conditions) ? b.conditions.filter((x): x is string => typeof x === "string").slice(0, 5).map((x) => x.slice(0, 100)) : [],
+    }];
+  });
   return {
-    params: {
-      originCode: p.originCode!,
-      destinationCode: p.destinationCode!,
-      departDate: p.departDate,
-      returnDate: isDate(p.returnDate) ? p.returnDate : undefined,
-      adults: intIn(p.adults, 1, 9) ?? 1,
-      children: intIn(p.children, 0, 8) ?? 0,
-      currency: oneOf(p.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD",
-    },
-    sort: oneOf(f.sort, ["price", "duration", "depart"] as const),
-    nonstopOnly: bool(f.nonstopOnly),
-    carryOnOnly: bool(f.carryOnOnly),
+    params,
+    sort: oneOf(f!.sort, ["price", "duration", "depart"] as const),
+    source: f!.source === "demo" ? "demo" : "live",
+    fetchedAt: typeof f!.fetchedAt === "string" && !Number.isNaN(Date.parse(f!.fetchedAt)) ? f!.fetchedAt : undefined,
+    shown,
   };
 }
 

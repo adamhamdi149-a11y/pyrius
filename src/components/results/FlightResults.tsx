@@ -1,11 +1,12 @@
 "use client";
-import { ArrowRight, Briefcase, CalendarDays, ChevronDown, Luggage, Pencil, Plane, RotateCcw, SlidersHorizontal, Users, Zap, BadgeDollarSign } from "lucide-react";
+import { AlertTriangle, ArrowRight, Briefcase, CalendarDays, ChevronDown, Clock, Luggage, Pencil, Plane, Radio, RotateCcw, SlidersHorizontal, Users, Zap, BadgeDollarSign } from "lucide-react";
 import { useMemo, useState } from "react";
+import { authHeaders } from "@/lib/authHeaders";
 import { Dialog } from "@/components/ui/Dialog";
 import { DemoBadge, EmptyState, Skeleton, useDismiss } from "@/components/ui/primitives";
 import { airportByCode } from "@/lib/data/catalog";
 import { useStore } from "@/lib/store/AppStore";
-import type { Attachment, FlightOffer, FlightSegment } from "@/lib/types";
+import type { Attachment, FlightOffer, FlightSegment, FlightSnapshot } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
 import { cx, formatDuration, formatRange, formatTime, money, parseDate } from "@/lib/utils";
 import { Price } from "@/components/ui/Price";
@@ -46,7 +47,7 @@ export function applyFlightFilters(offers: FlightOffer[], f: Filters) {
     }
     if (f.airlines.length && !f.airlines.includes(o.airline.code)) return false;
     if (f.maxPrice !== null && o.totalPrice > f.maxPrice) return false;
-    if (f.carryOn && !o.baggage.carryOn) return false;
+    if (f.carryOn && o.baggage && !o.baggage.carryOn) return false;
     return true;
   });
   const total = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
@@ -97,14 +98,15 @@ function Leg({ seg, label }: { seg: FlightSegment; label: string }) {
   );
 }
 
-export function FlightCard({ offer, tags, conversationId, onSaved, locale, index = 0 }: { offer: FlightOffer; tags: ("cheapest" | "fastest")[]; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number }) {
+export function FlightCard({ offer, tags, conversationId, onSaved, locale, index = 0, onExpired }: { offer: FlightOffer; tags: ("cheapest" | "fastest")[]; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number; onExpired?: () => void }) {
   const highlight = tags.includes("cheapest");
   return (
     <article className={cx("fcard", highlight && "fcard--best")} data-glow style={stagger(index)} aria-label={`${offer.airline.name}, ${money(offer.totalPrice, offer.currency, locale)}`}>
       <div className="fcard__main">
         <div className="fcard__airline">
-          <span className="airline-logo" style={{ ["--c" as string]: offer.airline.color }} aria-hidden="true">
-            {offer.airline.code}
+          <span className="airline-logo" style={{ ["--c" as string]: offer.airline.color }} aria-hidden="true" data-img={Boolean(offer.airline.logo)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {offer.airline.logo ? <img src={offer.airline.logo} alt="" width={28} height={28} loading="lazy" referrerPolicy="no-referrer" /> : offer.airline.code}
           </span>
           <div className="fcard__airline-text">
             <div className="fcard__name">{offer.airline.name}</div>
@@ -135,23 +137,47 @@ export function FlightCard({ offer, tags, conversationId, onSaved, locale, index
           <Price amount={offer.totalPrice} currency={offer.currency} locale={locale} size="lg" />
           <div className="t-meta num">
             {offer.travelers > 1 ? `${money(offer.pricePerTraveler, offer.currency, locale)} / traveler · ` : ""}
-            {offer.inbound ? "round trip" : "one way"}
+            {offer.inbound || offer.tripType === "round" ? "round trip" : "one way"}
           </div>
+          {offer.returnPending && <div className="t-meta fcard__pending">Return chosen at booking</div>}
         </div>
       </div>
       <div className="fcard__foot">
         <div className="fcard__facts">
-          <span className={cx("fact", !offer.baggage.carryOn && "fact--off")}>
-            <Briefcase />
-            {offer.baggage.carryOn ? "Carry-on included" : "No carry-on"}
-          </span>
-          <span className={cx("fact", !offer.baggage.checked && "fact--off")}>
-            <Luggage />
-            {offer.baggage.checked ? `${offer.baggage.checked} checked bag${offer.baggage.checked > 1 ? "s" : ""}` : "No checked bag"}
-          </span>
+          {offer.baggage ? (
+            <>
+              <span className={cx("fact", !offer.baggage.carryOn && "fact--off")}>
+                <Briefcase />
+                {offer.baggage.carryOn ? "Carry-on included" : "No carry-on"}
+              </span>
+              <span className={cx("fact", !offer.baggage.checked && "fact--off")}>
+                <Luggage />
+                {offer.baggage.checked ? `${offer.baggage.checked} checked bag${offer.baggage.checked > 1 ? "s" : ""}` : "No checked bag"}
+              </span>
+            </>
+          ) : (
+            <span className="fact fact--muted" title="As reported by Google Flights. The seller confirms baggage rules when you book.">
+              <Luggage />
+              {offer.conditions?.find((c) => /bag/i.test(c)) ?? "Bags shown when booking"}
+            </span>
+          )}
+          {offer.conditions
+            ?.filter((c) => /refund|change/i.test(c))
+            .slice(0, 1)
+            .map((c) => (
+              <span key={c} className="fact fact--muted">
+                {c}
+              </span>
+            ))}
           <span className="fact fact--muted">{offer.outbound.flightNumber}</span>
+          {offer.notes?.slice(0, 1).map((n) => (
+            <span key={n} className="fact fact--warn">
+              <AlertTriangle />
+              {n}
+            </span>
+          ))}
         </div>
-        <OfferActions offer={{ kind: "flight", offer }} conversationId={conversationId} onSaved={onSaved} />
+        <OfferActions offer={{ kind: "flight", offer }} conversationId={conversationId} onSaved={onSaved} onExpired={onExpired} />
       </div>
     </article>
   );
@@ -296,6 +322,7 @@ export function SearchSummary({
   currency,
   onEdit,
   kind = "Flights",
+  live,
 }: {
   from?: string;
   to: string;
@@ -304,6 +331,8 @@ export function SearchSummary({
   currency: string;
   onEdit?: () => void;
   kind?: string;
+  /** Results from a live provider rather than demo or example data. */
+  live?: boolean;
 }) {
   return (
     <div className="summary">
@@ -329,7 +358,14 @@ export function SearchSummary({
           {people}
         </span>
         <span className="num">{currency}</span>
-        <DemoBadge />
+        {live ? (
+          <span className="badge badge--live" title="Current fares from Google Flights">
+            <Radio />
+            Live fares
+          </span>
+        ) : (
+          <DemoBadge />
+        )}
       </div>
       {onEdit && (
         <button className="btn btn--ghost btn--sm summary__edit" onClick={onEdit} aria-label="Edit search">
@@ -343,7 +379,29 @@ export function SearchSummary({
 
 export function FlightResults({ attachment, conversationId, onSaved, onEdit }: { attachment: FlightAttachment; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; onEdit?: () => void }) {
   const { settings } = useStore();
-  const res = useSearch<{ offers: FlightOffer[]; source: string }>("flights", attachment.params);
+  // Results that came with the reply are shown as they were found; others (and refreshes) are searched here.
+  const [fresh, setFresh] = useState<FlightSnapshot | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const stored = fresh ?? attachment.snapshot ?? null;
+  const res = useSearch<FlightSnapshot>("flights", attachment.params, !stored);
+  const snap: FlightSnapshot | null = stored ?? (res.status === "ok" ? res.data : null);
+  const live = snap?.source === "live";
+  const stale = live && Date.now() - Date.parse(snap!.fetchedAt) > 30 * 60_000;
+  const refresh = async () => {
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const r = await fetch("/api/search/flights", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) }, body: JSON.stringify(attachment.params) });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || "The search couldn't be completed.");
+      setFresh(body as FlightSnapshot);
+    } catch (err) {
+      setRefreshError((err as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const init: Filters = {
     sort: attachment.filters?.sort ?? "price",
     stops: attachment.filters?.nonstopOnly ? "0" : "any",
@@ -362,7 +420,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
   const d = airportByCode(p.destinationCode);
   const travelers = p.adults + p.children;
 
-  const offers = res.status === "ok" ? res.data.offers : [];
+  const offers = useMemo(() => snap?.offers ?? [], [snap]);
   const list = useMemo(() => applyFlightFilters([...offers], f), [offers, f]);
   const cheapestId = useMemo(() => offers.reduce<FlightOffer | null>((a, b) => (!a || b.totalPrice < a.totalPrice ? b : a), null)?.id, [offers]);
   const fastestId = useMemo(
@@ -382,23 +440,50 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
         people={`${travelers} traveler${travelers > 1 ? "s" : ""}`}
         currency={p.currency}
         onEdit={onEdit}
+        live={live}
       />
 
-      {res.status === "loading" && (
-        <SearchProgress what={`flights ${p.originCode} → ${p.destinationCode}`}>
+      {!snap && res.status === "loading" && (
+        <SearchProgress what={`flights ${p.originCode} → ${p.destinationCode}`} source="Flight search">
           <FlightSkeleton />
         </SearchProgress>
       )}
-      {res.status === "error" && (
-        <div className="results__error">
+      {!snap && res.status === "error" && (
+        <div className="results__error" role="alert">
           <span>{res.error}</span>
-          <button className="btn btn--secondary btn--sm" onClick={res.retry}>
+          {res.code !== "not_configured" && (
+            <button className="btn btn--secondary btn--sm" onClick={res.retry}>
+              <RotateCcw />
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+      {snap && stale && (
+        <div className="results__stale" role="status">
+          <Clock />
+          <span>
+            These fares were retrieved at {new Date(snap.fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Prices and seats may have changed.
+          </span>
+          <button className="btn btn--secondary btn--sm" onClick={refresh} disabled={refreshing}>
+            <RotateCcw />
+            {refreshing ? "Refreshing…" : "Refresh prices"}
+          </button>
+        </div>
+      )}
+      {refreshError && (
+        <div className="results__error" role="alert">
+          <span>{refreshError}</span>
+          <button className="btn btn--secondary btn--sm" onClick={refresh} disabled={refreshing}>
             <RotateCcw />
             Try again
           </button>
         </div>
       )}
-      {res.status === "ok" && (
+      {snap && offers.length === 0 && (
+        <EmptyState icon={<Plane />} title="No flights found" body="No flights were returned for this route and these dates. Try other dates, a nearby airport, or allowing stops." />
+      )}
+      {snap && offers.length > 0 && (
         <>
           <div className="toolbar">
             <div className="seg" role="group" aria-label="Sort by">
@@ -434,7 +519,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
             </button>
           </div>
 
-          <SourceLine count={offers.length} noun="offers" ms={res.ms} />
+          <SourceLine count={offers.length} noun="offers" ms={res.status === "ok" ? res.ms : undefined} live={live} provider={snap.provider} fetchedAt={snap.fetchedAt} />
           <div className="results__meta">
             <span className="num">
               <b>{list.length}</b> of {offers.length} flights
@@ -443,7 +528,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
               <span>
                 {budgetFit > 0
                   ? `${budgetFit} within your ${money(attachment.budget!, p.currency, locale)} budget`
-                  : `None within ${money(attachment.budget!, p.currency, locale)} in this demo data`}
+                  : `None within ${money(attachment.budget!, p.currency, locale)}${live ? "" : " in this demo data"}`}
                 {budgetFit > 0 && f.maxPrice === null && (
                   <button className="link-btn" onClick={() => set({ maxPrice: attachment.budget! })}>
                     Show only those
@@ -480,6 +565,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
                   locale={locale}
                   conversationId={conversationId}
                   onSaved={onSaved}
+                  onExpired={refresh}
                   tags={[...(offer.id === cheapestId ? (["cheapest"] as const) : []), ...(offer.id === fastestId ? (["fastest"] as const) : [])]}
                 />
               ))}
@@ -491,7 +577,9 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
             </button>
           )}
           <p className="results__fine">
-            Demonstration offers generated for testing — not live fares or seat availability. Pyrius doesn&apos;t sell tickets; you&apos;ll compare and book with the airline or a booking site.
+            {live
+              ? "Live fares from Google Flights at the time shown. Prices and seats can change until you book. Pyrius doesn't sell tickets: Book shows who sells each itinerary and takes you to their site."
+              : "Demonstration offers generated for testing — not live fares or seat availability. Pyrius doesn't sell tickets; you'll compare and book with the airline or a booking site."}
           </p>
 
           <Dialog

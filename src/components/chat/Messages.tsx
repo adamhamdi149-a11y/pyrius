@@ -6,6 +6,14 @@ import { prefersReducedMotion, stagger } from "@/lib/motion";
 import type { Chip, ChatMessage } from "@/lib/types";
 
 const WORD_STEP = 16; // ms between words
+
+const host = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
 const WORD_FADE = 320; // ms each word takes to settle
 
 /**
@@ -108,6 +116,16 @@ export function AssistantMessage({
                   {c.label}
                   {c.action.type === "navigate" && <ArrowRight />}
                 </button>
+              ))}
+            </div>
+          )}
+          {typed && m.sources && m.sources.length > 0 && (
+            <div className="msg__sources">
+              <span>{m.sources.length > 1 ? "Sources" : "Source"}</span>
+              {m.sources.map((s) => (
+                <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" title={s.title}>
+                  {host(s.url)}
+                </a>
               ))}
             </div>
           )}

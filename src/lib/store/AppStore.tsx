@@ -254,7 +254,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const runSimulatedCheck = useCallback(
     (id?: string) => {
       const now = new Date();
-      const targets = trackers.filter((x) => (id ? x.id === id : x.status !== "paused"));
+      // Simulated checks only ever touch demo offers; live fares are never given made-up prices.
+      const targets = trackers.filter((x) => x.source === "demo" && (id ? x.id === id : x.status !== "paused"));
       const updated = targets.map((x) => simulateCheck(x, now));
       setTrackers((list) => list.map((x) => updated.find((u) => u.id === x.id) ?? x));
       updated.forEach((u) => persist((r) => r.putTracker(u)));

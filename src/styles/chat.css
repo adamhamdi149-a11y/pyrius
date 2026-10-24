@@ -1414,3 +1414,34 @@
   }
 }
 
+
+/* Web pages the AI consulted for a reply */
+.msg__sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: var(--fs-xs);
+}
+
+.msg__sources span {
+  color: var(--text-3);
+  margin-right: 2px;
+}
+
+.msg__sources a {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  transition: border-color var(--dur-base), color var(--dur-base);
+}
+
+.msg__sources a:hover {
+  color: var(--text);
+  border-color: var(--accent-line);
+}

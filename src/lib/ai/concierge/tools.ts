@@ -1,6 +1,9 @@
 import { AIRPORTS, airportByCode, cityName } from "@/lib/data/catalog";
+import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
 import { planById } from "@/lib/plans";
 import { getProviders } from "@/lib/providers";
+import { PROVIDER_MESSAGES, ProviderError } from "@/lib/providers/errors";
+import { searchFlights } from "@/lib/providers/flightSearch";
 import { suggestedTarget } from "@/lib/tracking/simulator";
 import type {
   AnyOffer,
@@ -8,6 +11,7 @@ import type {
   CarOffer,
   CarSearchParams,
   ClientAction,
+  DataSource,
   FlightOffer,
   FlightSearchParams,
   HotelOffer,
@@ -39,8 +43,10 @@ export interface TurnState {
   trip: TripPreferences;
   today: string;
   locale: "en" | "fr";
-  /** Latest result sets shown in this conversation (from the client) and in this turn. */
-  results: { flights?: FlightSearchParams; hotels?: HotelSearchParams; cars?: CarSearchParams };
+  /** The flight results the user is looking at (from the app), replaced by any search in this turn. */
+  flights?: { params: FlightSearchParams; source: DataSource; fetchedAt?: string; shown: FlightBrief[] };
+  /** Latest hotel and car result sets (example data, re-run on demand). */
+  results: { hotels?: HotelSearchParams; cars?: CarSearchParams };
   saved: SavedSummary[];
   plan: PlanId;
   counts: { saved: number; trackers: number };
@@ -103,7 +109,7 @@ export const TOOLS = [
     name: "search_flights",
     strict: true,
     description:
-      "Search flights for the current trip and show the results to the user as cards. Needs origin, destination, departure date, return date (round trips) and number of travelers. Use the arguments to refine the view: sort, nonstop only, carry-on only.",
+      "Search real flight offers for the current trip with Pyrius's flight data provider and show them to the user as cards. Use it whenever the user wants flights or tickets and the required details are known: origin, destination, departure date, return date (round trips) and number of travelers. Use the arguments to refine: sort, nonstop only, carry-on only. The result says whether offers are live and when they were retrieved, or why the search failed.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -361,27 +367,6 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
 
 /* ---------------- Searches and offers ---------------- */
 
-const fmtTime = (iso: string) => iso.slice(11, 16);
-const fmtDur = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
-
-function flightSummary(o: FlightOffer, n: number) {
-  return {
-    n,
-    id: o.id,
-    airline: o.airline.name,
-    out: `${o.outbound.from} ${o.outbound.depart.slice(0, 10)} ${fmtTime(o.outbound.depart)} → ${o.outbound.to} ${fmtTime(o.outbound.arrive)}, ${fmtDur(o.outbound.durationMin)}, ${o.outbound.stops ? `${o.outbound.stops} stop (${o.outbound.stopCodes.join(", ")})` : "nonstop"}`,
-    back: o.inbound
-      ? `${o.inbound.from} ${o.inbound.depart.slice(0, 10)} ${fmtTime(o.inbound.depart)} → ${o.inbound.to} ${fmtTime(o.inbound.arrive)}, ${fmtDur(o.inbound.durationMin)}, ${o.inbound.stops ? `${o.inbound.stops} stop (${o.inbound.stopCodes.join(", ")})` : "nonstop"}`
-      : null,
-    total: `${o.totalPrice} ${o.currency}`,
-    per_traveler: `${o.pricePerTraveler} ${o.currency}`,
-    cabin: o.cabin,
-    bags: `${o.baggage.carryOn ? "carry-on included" : "no carry-on"}, ${o.baggage.checked} checked`,
-  };
-}
-
-const totalMin = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
-
 export function flightParams(t: TripPreferences): FlightSearchParams {
   return {
     originCode: t.originCode!,
@@ -424,13 +409,12 @@ function carSummary(c: CarOffer, n: number) {
   };
 }
 
-/** Finds an offer the user has actually been shown, by re-running the (deterministic) search that produced it. */
-async function findOffer(s: TurnState, kind: OfferKind, id: string): Promise<AnyOffer | null> {
+const totalMin = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
+const isNonstop = (o: FlightOffer) => o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0);
+
+/** Hotel and car example offers are regenerated from their search; flights only come from what the user was shown. */
+async function findExample(s: TurnState, kind: "hotel" | "car", id: string): Promise<AnyOffer | null> {
   const p = getProviders();
-  if (kind === "flight" && s.results.flights) {
-    const o = (await p.flights.search(s.results.flights)).find((x) => x.id === id);
-    return o ? { kind, offer: o } : null;
-  }
   if (kind === "hotel" && s.results.hotels) {
     const o = (await p.hotels.search(s.results.hotels)).find((x) => x.id === id);
     return o ? { kind, offer: o } : null;
@@ -442,11 +426,25 @@ async function findOffer(s: TurnState, kind: OfferKind, id: string): Promise<Any
   return null;
 }
 
-const offerPrice = (o: AnyOffer) => o.offer.totalPrice;
-const offerLabel = (o: AnyOffer) =>
-  o.kind === "flight" ? `${o.offer.airline.name} ${o.offer.outbound.from} → ${o.offer.outbound.to}` : o.kind === "hotel" ? o.offer.name : `${o.offer.category} · ${o.offer.supplier}`;
+const shownFlight = (s: TurnState, id: string) => s.flights?.shown.find((f) => f.id === id);
 
-const DEMO_NOTE = "These are Pyrius sample prices (demo data), not live fares or availability. Say so briefly when you mention prices.";
+// The cards show the exact retrieval time in the user's own timezone, so the AI just says "just now".
+const LIVE_NOTE = (at: string) =>
+  `Live offers from Google Flights, retrieved just now (${at}); don't state a clock time, the cards show it. Prices and seats can change until the user books with the seller. Pyrius doesn't sell tickets; each card's Book button shows who sells that itinerary and continues to their site.`;
+const DEMO_NOTE = "These are Pyrius demo flights (generated examples), not real offers. Say so clearly; never call them real or live.";
+
+function searchFailure(err: unknown) {
+  const code = err instanceof ProviderError ? err.code : "unavailable";
+  const guidance: Record<string, string> = {
+    not_configured: "Tell the user plainly that live flight search isn't connected in Pyrius yet, so you can't show real fares right now. Do not show, describe or invent any flights or prices. You may offer to look up the airlines that fly the route or their official sites with web search, clearly as information, not offers.",
+    auth: "Tell the user the flight search couldn't be completed because of a problem on Pyrius's side, and that they can try again later. Do not invent flights.",
+    quota: "Tell the user the flight search is temporarily unavailable (search limit reached) and to try again later. Do not invent flights.",
+    timeout: "Tell the user the flight search took too long and offer to try again. Do not invent flights.",
+    unavailable: "Tell the user the flight search couldn't be completed and offer to try again. Do not invent flights.",
+    bad_request: "Check the trip details with the user; the provider couldn't run this search.",
+  };
+  return { ok: false, error: code, message: PROVIDER_MESSAGES[code as keyof typeof PROVIDER_MESSAGES] ?? PROVIDER_MESSAGES.unavailable, guidance: guidance[code] ?? guidance.unavailable, flights_found: 0 };
+}
 
 /* ---------------- Executor ---------------- */
 
@@ -471,53 +469,82 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
     case "search_flights": {
       const missing = missingForFlights(s.trip);
       if (missing.length) return { ok: false, error: "missing_details", missing, hint: "Ask the user for the missing details (one short question)." };
-      const params = flightParams(s.trip);
-      const offers = await p.flights.search(params);
-      if (!offers.length) return { ok: false, error: "no_results", hint: "Tell the user no flights were found for these dates and suggest nearby dates." };
-      const nonstopCount = offers.filter((o) => o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0)).length;
       const wantNonstop = (a.nonstop_only as boolean | null) ?? s.trip.nonstopOnly ?? false;
       const carryOn = (a.carry_on_only as boolean | null) ?? s.trip.carryOnOnly ?? false;
       const sort = (a.sort as "price" | "duration" | "depart" | null) ?? (s.trip.priority === "fastest" ? "duration" : "price");
+      const params = flightParams(s.trip);
+      let snap;
+      try {
+        snap = await searchFlights(params);
+      } catch (err) {
+        s.searched = "flights";
+        return searchFailure(err);
+      }
+      const offers = snap.offers;
+      if (!offers.length) {
+        return {
+          ok: true,
+          flights_found: 0,
+          data_source: snap.source,
+          guidance: "No flights were returned for this route and these dates. Say so, and suggest other dates, a nearby airport, or allowing stops. Don't invent alternatives.",
+        };
+      }
+      const nonstopCount = offers.filter(isNonstop).length;
       const nonstopApplied = wantNonstop && nonstopCount > 0;
-      let view = offers.filter((o) => (!nonstopApplied || (o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0))) && (!carryOn || o.baggage.carryOn));
+      const knownBags = offers.some((o) => o.baggage);
+      const carryOnApplied = carryOn && knownBags;
+      let view = offers.filter((o) => (!nonstopApplied || isNonstop(o)) && (!carryOnApplied || o.baggage?.carryOn));
       view = [...view].sort((x, y) => (sort === "duration" ? totalMin(x) - totalMin(y) : sort === "depart" ? x.outbound.depart.localeCompare(y.outbound.depart) : x.totalPrice - y.totalPrice));
       const budget = s.trip.budget || undefined;
       const cheapest = [...offers].sort((x, y) => x.totalPrice - y.totalPrice)[0];
       const fastest = [...offers].sort((x, y) => totalMin(x) - totalMin(y))[0];
-      s.results.flights = params;
+      s.flights = { params, source: snap.source, fetchedAt: snap.fetchedAt, shown: view.map((o, i) => flightBrief(o, i + 1)) };
       s.searched = "flights";
       s.attachments = s.attachments.filter((x) => x.type !== "flights");
-      s.attachments.push({ type: "flights", params, budget, filters: { nonstopOnly: nonstopApplied, carryOnOnly: carryOn, sort } });
+      s.attachments.push({ type: "flights", params, budget, filters: { nonstopOnly: nonstopApplied, carryOnOnly: carryOnApplied, sort }, snapshot: snap });
+      const round = Boolean(params.returnDate);
       return {
         ok: true,
-        shown_to_user: "The results are displayed as interactive cards under your reply. Don't list every flight; highlight a few.",
-        data_source: DEMO_NOTE,
+        flights_found: offers.length,
+        live: snap.source === "live",
+        data_source: snap.source === "live" ? LIVE_NOTE(snap.fetchedAt) : DEMO_NOTE,
+        shown_to_user: "The offers are displayed as interactive cards under your reply. Don't list every flight; highlight two or three.",
         route: `${cityName(params.originCode)} → ${cityName(params.destinationCode)}`,
-        dates: params.returnDate ? `${params.departDate} to ${params.returnDate}` : `${params.departDate}, one-way`,
+        dates: round ? `${params.departDate} to ${params.returnDate}` : `${params.departDate}, one-way`,
         travelers: `${params.adults} adult(s)${params.children ? `, ${params.children} child(ren)` : ""}`,
-        total_offers: offers.length,
+        pricing: round
+          ? snap.source === "live" && offers.some((o) => o.returnPending)
+            ? "Prices are round-trip totals for all travelers. Each card is an outbound flight; the user picks the return flight in the booking step."
+            : "Prices are round-trip totals for all travelers."
+          : "Prices are one-way totals for all travelers.",
         shown_after_filters: view.length,
         nonstop_offers: nonstopCount,
-        nonstop_note: wantNonstop && !nonstopCount ? "No nonstop flights on this route, so connections are shown." : null,
+        nonstop_note: wantNonstop && !nonstopCount ? "No nonstop flights were returned, so connections are shown." : null,
+        baggage_note: knownBags ? null : "This provider doesn't report included bags per offer; the seller shows baggage rules when booking.",
         within_budget: budget ? offers.filter((o) => o.totalPrice <= budget).length : null,
         budget_total: budget ?? null,
-        cabin_note: s.trip.cabin === "business" || s.trip.cabin === "first" ? `Pyrius results currently cover economy and premium economy only, not ${s.trip.cabin}.` : null,
+        cabin_note:
+          snap.source === "demo" && (s.trip.cabin === "business" || s.trip.cabin === "first") ? `Demo results only include economy and premium economy, not ${s.trip.cabin}.` : null,
         cheapest_id: cheapest.id,
         fastest_id: fastest.id,
-        top: view.slice(0, 5).map((o, i) => flightSummary(o, i + 1)),
+        top: view.slice(0, 5).map((o, i) => flightBrief(o, i + 1)),
       };
     }
 
     case "get_offer_details": {
       const kind = a.kind as OfferKind;
       const ids = Array.isArray(a.offer_ids) ? (a.offer_ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 3) : [];
-      const found = await Promise.all(ids.map((id) => findOffer(s, kind, id)));
-      const offers = found.filter((x): x is AnyOffer => Boolean(x));
+      if (kind === "flight") {
+        const found = ids.map((id) => shownFlight(s, id)).filter(Boolean);
+        if (!found.length) return { ok: false, error: "Those flights aren't in the results the user is looking at. Ask which one they mean, or search again." };
+        return { ok: true, data_source: s.flights?.source === "live" ? LIVE_NOTE(s.flights.fetchedAt ?? new Date().toISOString()) : DEMO_NOTE, offers: found };
+      }
+      const offers = (await Promise.all(ids.map((id) => findExample(s, kind, id)))).filter((x): x is AnyOffer => Boolean(x));
       if (!offers.length) return { ok: false, error: "Those offers aren't in the latest results. Search again or ask which option they mean." };
       return {
         ok: true,
-        data_source: DEMO_NOTE,
-        offers: offers.map((o, i) => (o.kind === "flight" ? flightSummary(o.offer, i + 1) : o.kind === "hotel" ? { ...hotelSummary(o.offer, i + 1), description: o.offer.description, amenities: o.offer.amenities } : { ...carSummary(o.offer, i + 1), conditions: o.offer.conditions })),
+        data_source: "Example data, not real listings.",
+        offers: offers.map((o, i) => (o.kind === "hotel" ? { ...hotelSummary(o.offer, i + 1), description: o.offer.description, amenities: o.offer.amenities } : { ...carSummary(o.offer as CarOffer, i + 1), conditions: (o.offer as CarOffer).conditions })),
       };
     }
 
@@ -525,23 +552,25 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       const kind = a.kind as OfferKind;
       const id = String(a.offer_id ?? "");
       if (s.saved.some((x) => x.id === id)) return { ok: true, status: "already_saved" };
-      const o = await findOffer(s, kind, id);
-      if (!o) return { ok: false, error: "That offer isn't in the latest results, so it can't be saved. Ask which one they mean." };
+      const flight = kind === "flight" ? shownFlight(s, id) : undefined;
+      const example = kind !== "flight" ? await findExample(s, kind, id) : null;
+      if (!flight && !example) return { ok: false, error: "That offer isn't in the results the user is looking at, so it can't be saved. Ask which one they mean." };
       const limit = planById(s.plan).limits.saved;
       if (s.counts.saved >= limit) return { ok: false, error: "plan_limit", detail: `The ${planById(s.plan).name} plan holds ${limit} saved offers. They can remove some or upgrade in Settings.` };
-      s.actions = s.actions.filter((x) => !(x.type === "save" && x.offer.offer.id === id));
-      s.actions.push({ type: "save", offer: o });
+      s.actions = s.actions.filter((x) => !(x.type === "save" && x.offerId === id));
+      s.actions.push({ type: "save", offerId: id, kind, offer: example ?? undefined });
       s.counts.saved += 1;
-      return { ok: true, status: "saved", label: offerLabel(o) };
+      return { ok: true, status: "saved", label: flight ? `${flight.airline} ${flight.out.slice(0, 40)}` : offerLabel(example!) };
     }
 
     case "track_price": {
       const kind = a.kind as OfferKind;
       const id = String(a.offer_id ?? "");
-      const o = await findOffer(s, kind, id);
+      const flight = kind === "flight" ? shownFlight(s, id) : undefined;
+      const example = kind !== "flight" ? await findExample(s, kind, id) : null;
       const saved = s.saved.find((x) => x.id === id);
-      if (!o && !saved) return { ok: false, error: "That offer isn't in the latest results or saved offers. Ask which one they mean." };
-      const price = o ? offerPrice(o) : saved!.price;
+      if (!flight && !example && !saved) return { ok: false, error: "That offer isn't in the results or saved offers. Ask which one they mean." };
+      const price = flight?.price ?? (example ? example.offer.totalPrice : saved!.price);
       const requested = num(a.target_price, 1, 1_000_000);
       if (a.target_price != null && requested === undefined) return { ok: false, error: "The target price must be a positive amount." };
       const target = requested ?? suggestedTarget(price);
@@ -549,21 +578,23 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       const limit = planById(s.plan).limits.trackers;
       if (!already && s.counts.trackers >= limit) return { ok: false, error: "plan_limit", detail: `The ${planById(s.plan).name} plan tracks up to ${limit} prices. They can stop one or upgrade in Settings.` };
       // Tracking saves the offer too, so a separate save for it is redundant.
-      s.actions = s.actions.filter((x) => !(x.type === "save" && x.offer.offer.id === id) && !(x.type === "track" && x.offerId === id));
-      s.actions.push({ type: "track", offerId: id, offer: o ?? undefined, targetPrice: target });
+      s.actions = s.actions.filter((x) => x.offerId !== id);
+      s.actions.push({ type: "track", offerId: id, kind, offer: example ?? undefined, targetPrice: target });
       if (!already) s.counts.trackers += 1;
+      const liveFlight = kind === "flight" && s.flights?.source === "live";
       return {
         ok: true,
         status: already ? "target_updated" : "tracking_started",
-        label: o ? offerLabel(o) : saved!.label,
         current_price: price,
         target_price: target,
-        note: "Price checks in Pyrius are simulated for demo data; say it will alert them in the Price tracking page, not by promising real fare drops.",
+        note: liveFlight
+          ? "The offer is saved with its target in Price tracking. Automatic re-checks of live fares aren't running yet, so don't promise alerts; say they can search again any time to see the current price."
+          : "Price checks for example offers are simulated; say it's tracked in the Price tracking page without promising real fare drops.",
       };
     }
 
     case "list_saved_offers":
-      return { ok: true, count: s.saved.length, saved: s.saved.slice(0, 30), data_source: DEMO_NOTE };
+      return { ok: true, count: s.saved.length, saved: s.saved.slice(0, 30) };
 
     case "search_hotels": {
       const t = s.trip;
@@ -583,7 +614,7 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       return {
         ok: true,
         shown_to_user: "The stays are displayed as cards under your reply. Highlight two or three.",
-        data_source: "Property names, ratings and prices are illustrative demo data, not real listings or availability. Say so briefly.",
+        data_source: "Example stays: names, ratings and prices are illustrative, not real listings or availability (no live hotel provider is connected). Say so briefly.",
         nights: daysBetween(params.checkIn, params.checkOut),
         rooms,
         total_offers: offers.length,
@@ -605,7 +636,7 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       return {
         ok: true,
         shown_to_user: "The cars are displayed as cards under your reply.",
-        data_source: "Demo prices; the rental company confirms the final price and availability when the user books with them.",
+        data_source: "Example rental cars with illustrative prices (no live car provider is connected); the rental company sets the real price. Say so briefly.",
         pick_up: `${cityName(params.destinationCode)} airport, ${params.pickUp} to ${params.dropOff}`,
         total_offers: offers.length,
         top: [...offers].sort((x, y) => x.totalPrice - y.totalPrice).slice(0, 5).map((c, i) => carSummary(c, i + 1)),
@@ -627,3 +658,6 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       return { ok: false, error: `Unknown action "${name}".` };
   }
 }
+
+const offerLabel = (o: AnyOffer) =>
+  o.kind === "flight" ? `${o.offer.airline.name} ${o.offer.outbound.from} → ${o.offer.outbound.to}` : o.kind === "hotel" ? o.offer.name : `${o.offer.category} · ${o.offer.supplier}`;

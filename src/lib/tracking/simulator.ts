@@ -65,7 +65,9 @@ export function trackerFromOffer(o: AnyOffer, targetPrice: number, now = new Dat
     createdAt: at,
   };
   const price = o.offer.totalPrice;
-  const history = sampleHistory(o.offer.id, price, at);
+  // A live offer starts from the one real price we have; only demo offers get a generated history.
+  const live = o.offer.source === "live";
+  const history = live ? [{ at: (o.kind === "flight" && o.offer.fetchedAt) || at, price, simulated: false }] : sampleHistory(o.offer.id, price, at);
   if (o.kind === "flight") {
     const f = o.offer;
     const from = airportByCode(f.outbound.from)?.city ?? f.outbound.from;

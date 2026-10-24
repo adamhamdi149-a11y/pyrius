@@ -1,6 +1,7 @@
 import { cityName } from "@/lib/data/catalog";
-import { getProviders } from "@/lib/providers";
-import type { AgentReply, AgentStage, Attachment, CarSearchParams, Chip, FlightOffer, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences } from "@/lib/types";
+import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
+import { flightMode, getProviders } from "@/lib/providers";
+import type { AgentReply, AgentStage, Attachment, CarSearchParams, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
 import { contextMessage, INSTRUCTIONS, REPLY_FORMAT } from "./prompt";
 import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
 
@@ -19,7 +20,8 @@ export interface ConciergeRequest {
   homeAirport?: string;
   today: string;
   results: {
-    flights?: { params: FlightSearchParams; sort?: "price" | "duration" | "depart"; nonstopOnly?: boolean; carryOnOnly?: boolean };
+    /** The flight cards the user is looking at, in the order shown. */
+    flights?: { params: FlightSearchParams; sort?: "price" | "duration" | "depart"; source?: DataSource; fetchedAt?: string; shown: FlightBrief[] };
     hotels?: HotelSearchParams;
     cars?: CarSearchParams;
   };
@@ -36,11 +38,16 @@ export class ConciergeError extends Error {
 
 const MODEL = () => process.env.OPENAI_MODEL || "gpt-5.4-mini";
 const EFFORT = () => process.env.OPENAI_REASONING || "low";
+const reasoningModel = () => /^(gpt-5|o\d)/.test(MODEL());
 const MAX_ROUNDS = 6;
-const CALL_TIMEOUT_MS = 25_000;
-const TURN_BUDGET_MS = 50_000;
+const CALL_TIMEOUT_MS = 30_000;
+const TURN_BUDGET_MS = 55_000;
 
-type OutputItem = { type: string; call_id?: string; name?: string; arguments?: string; content?: { type: string; text?: string }[] };
+/** OpenAI's hosted web search, for current travel information and official sites. Never a source of fares. */
+const WEB_SEARCH = { type: "web_search", search_context_size: "low", user_location: { type: "approximate", country: "CA" } } as const;
+
+type Annotation = { type: string; url?: string; title?: string };
+type OutputItem = { type: string; call_id?: string; name?: string; arguments?: string; content?: { type: string; text?: string; annotations?: Annotation[] }[] };
 
 async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadline: number }) {
   const key = process.env.OPENAI_API_KEY;
@@ -57,16 +64,18 @@ async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadl
         model: MODEL(),
         instructions: INSTRUCTIONS,
         input,
-        tools: TOOLS,
+        tools: [...TOOLS, WEB_SEARCH],
         tool_choice: opts.forceAnswer ? "none" : "auto",
         parallel_tool_calls: true,
+        // At most two web searches per step keeps answers quick and the cost bounded.
+        max_tool_calls: 2,
         // Older chat models (gpt-4o, gpt-4.1) don't take a reasoning setting.
-        ...(/^(gpt-5|o\d)/.test(MODEL()) ? { reasoning: { effort: EFFORT() } } : {}),
+        ...(reasoningModel() ? { reasoning: { effort: EFFORT() } } : {}),
         text: { format: REPLY_FORMAT },
-        max_output_tokens: 2000,
+        max_output_tokens: 2500,
         // Nothing is stored on OpenAI's side for later retrieval; reasoning is passed back encrypted.
         store: false,
-        include: /^(gpt-5|o\d)/.test(MODEL()) ? ["reasoning.encrypted_content"] : [],
+        include: reasoningModel() ? ["reasoning.encrypted_content"] : [],
       }),
     });
   } catch (err) {
@@ -83,48 +92,62 @@ async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadl
   return (await res.json()) as { status: string; output: OutputItem[] };
 }
 
+/** Plain text for the chat bubble: inline citations move to the sources list, markdown emphasis goes. */
+function plain(text: string) {
+  return text
+    .replace(/\s*\(\[[^\]]*\]\((https?:[^)]+)\)\)/g, "")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 function finalText(output: OutputItem[]) {
   const msg = output.find((o) => o.type === "message");
-  const text = msg?.content?.find((c) => c.type === "output_text")?.text;
-  if (!text) return null;
+  const part = msg?.content?.find((c) => c.type === "output_text");
+  if (!part?.text) return null;
   try {
-    const j = JSON.parse(text) as { reply?: unknown; suggestions?: unknown; topic?: unknown };
+    const j = JSON.parse(part.text) as { reply?: unknown; suggestions?: unknown; topic?: unknown };
     if (typeof j.reply !== "string" || !j.reply.trim()) return null;
+    const sources: WebSource[] = [];
+    for (const a of part.annotations ?? []) {
+      if (a.type !== "url_citation" || !a.url || sources.some((s) => s.url === a.url)) continue;
+      try {
+        const u = new URL(a.url);
+        if (u.protocol === "https:" || u.protocol === "http:") sources.push({ title: (a.title || u.hostname).slice(0, 120), url: u.toString() });
+      } catch {}
+    }
     return {
-      reply: j.reply.trim(),
+      reply: plain(j.reply),
       suggestions: Array.isArray(j.suggestions) ? j.suggestions.filter((x): x is string => typeof x === "string") : [],
       topic: j.topic === "off_topic" ? ("off_topic" as const) : ("travel" as const),
+      sources: sources.slice(0, 5),
     };
   } catch {
     return null;
   }
 }
 
-const totalMin = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
-
 /** The offers the user is looking at, in the order the cards show them, so "the second one" resolves. */
 async function shownResults(r: ConciergeRequest["results"]) {
   const p = getProviders();
   const out: string[] = [];
-  if (r.flights) {
-    let list = await p.flights.search(r.flights.params);
-    const nonstop = (o: FlightOffer) => o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0);
-    if (r.flights.nonstopOnly) list = list.filter(nonstop);
-    if (r.flights.carryOnOnly) list = list.filter((o) => o.baggage.carryOn);
-    const sort = r.flights.sort ?? "price";
-    list = [...list].sort((x, y) => (sort === "duration" ? totalMin(x) - totalMin(y) : sort === "depart" ? x.outbound.depart.localeCompare(y.outbound.depart) : x.totalPrice - y.totalPrice));
+  if (r.flights?.shown.length) {
+    const live = r.flights.source === "live";
     out.push(
-      `Flight cards currently shown (${cityName(r.flights.params.originCode)} → ${cityName(r.flights.params.destinationCode)}, sorted by ${sort}): ` +
-        list
-          .slice(0, 8)
-          .map((o, i) => `#${i + 1} id=${o.id} ${o.airline.name} departs ${o.outbound.depart.slice(11, 16)}, ${o.outbound.stops ? `${o.outbound.stops} stop` : "nonstop"}, ${Math.round(totalMin(o) / 60)}h total, ${o.baggage.carryOn ? "carry-on" : "no carry-on"} + ${o.baggage.checked} checked, ${o.totalPrice} ${o.currency}`)
+      `Flight cards currently shown (${cityName(r.flights.params.originCode)} → ${cityName(r.flights.params.destinationCode)}, ${live ? `live offers retrieved ${r.flights.fetchedAt ?? "earlier"}` : "demo examples"}, sorted by ${r.flights.sort ?? "price"}): ` +
+        r.flights.shown
+          .slice(0, 10)
+          .map((f) => `#${f.n} id=${f.id} ${f.airline}: ${f.out}${f.back ? ` / back ${f.back}` : ""}, ${f.price} ${f.currency}${f.return_chosen_at_booking ? " (round trip, return chosen when booking)" : ""}${f.bags ? `, ${f.bags}` : ""}${f.conditions.length ? ` [${f.conditions.join("; ")}]` : ""}`)
           .join("; "),
     );
+  } else if (r.flights) {
+    out.push("Earlier flight results in this conversation are no longer available to you; search again if the user refers to them.");
   }
   if (r.hotels) {
     const list = [...(await p.hotels.search(r.hotels))].sort((x, y) => x.pricePerNight - y.pricePerNight);
     out.push(
-      `Stay cards shown (cheapest first): ${list
+      `Example stay cards shown (cheapest first): ${list
         .slice(0, 12)
         .map((h, i) => `#${i + 1} id=${h.id} ${h.name} (${h.type}, ${h.stars}★, ${h.neighborhood}) ${h.pricePerNight}/night, ${h.freeCancellation ? "free cancellation" : "no free cancellation"}, ${h.breakfastIncluded ? "breakfast" : "no breakfast"}`)
         .join("; ")}`,
@@ -132,18 +155,28 @@ async function shownResults(r: ConciergeRequest["results"]) {
   }
   if (r.cars) {
     const list = [...(await p.cars.search(r.cars))].sort((x, y) => x.totalPrice - y.totalPrice);
-    out.push(`Car cards shown (cheapest first): ${list.slice(0, 8).map((c, i) => `#${i + 1} id=${c.id} ${c.category} (${c.example}) ${c.supplier}, ${c.seats} seats, ${c.transmission}, ${c.totalPrice} total`).join("; ")}`);
+    out.push(`Example car cards shown (cheapest first): ${list.slice(0, 8).map((c, i) => `#${i + 1} id=${c.id} ${c.category} (${c.example}) ${c.supplier}, ${c.seats} seats, ${c.transmission}, ${c.totalPrice} total`).join("; ")}`);
   }
   return out.join("\n");
 }
 
+/** Conversations from before results were stored with the reply: in demo mode the same demo search rebuilds them. */
+async function restoreShown(r: ConciergeRequest["results"]) {
+  if (!r.flights || r.flights.shown.length || flightMode() !== "demo") return r;
+  const offers = await getProviders().flights.search(r.flights.params);
+  const sorted = [...offers].sort((a, b) => a.totalPrice - b.totalPrice);
+  return { ...r, flights: { ...r.flights, source: "demo" as const, shown: sorted.slice(0, 12).map((o, i) => flightBrief(o, i + 1)) } };
+}
+
 export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
   const deadline = Date.now() + TURN_BUDGET_MS;
+  const results = await restoreShown(req.results).catch(() => req.results);
   const state: TurnState = {
     trip: { ...req.trip, currency: req.trip.currency ?? "CAD" },
     today: req.today,
     locale: req.locale,
-    results: { flights: req.results.flights?.params, hotels: req.results.hotels, cars: req.results.cars },
+    flights: results.flights?.shown.length ? { params: results.flights.params, source: results.flights.source ?? "live", fetchedAt: results.flights.fetchedAt, shown: results.flights.shown } : undefined,
+    results: { hotels: results.hotels, cars: results.cars },
     saved: req.saved,
     plan: req.plan,
     counts: { ...req.counts },
@@ -152,7 +185,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     toolCalls: 0,
   };
 
-  const shown = await shownResults(req.results).catch(() => "");
+  const shown = await shownResults(results).catch(() => "");
   const context = contextMessage({
     today: req.today,
     locale: req.locale,
@@ -160,7 +193,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     trip: state.trip,
     stage: req.stage,
     saved: req.saved,
-    hasResults: { flights: Boolean(req.results.flights), hotels: Boolean(req.results.hotels), cars: Boolean(req.results.cars) },
+    flightMode: flightMode(),
   });
 
   const input: unknown[] = [
@@ -191,7 +224,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
   }
   if (!final) throw new ConciergeError("bad_response", "No final answer");
 
-  // Server-side boundary: an off-topic reply stays short and can't carry results or changes.
+  // Server-side boundary: an off-topic reply stays short and can't carry results, changes or sources.
   const offTopic = final.topic === "off_topic" && state.toolCalls === 0;
   const reply = offTopic ? clip(final.reply, 280) : clip(final.reply, 1400);
   const chips: Chip[] = [...new Set(final.suggestions.map((s) => s.trim()).filter((s) => s && s.length <= 48))]
@@ -208,6 +241,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     stage,
     attachments: attachments.length ? attachments : undefined,
     actions: offTopic || !state.actions.length ? undefined : state.actions,
+    sources: offTopic || !final.sources.length ? undefined : final.sources,
     title: t.originCode && t.destinationCode ? `${cityName(t.originCode, req.locale)} → ${cityName(t.destinationCode, req.locale)}` : undefined,
     engine: "openai",
   };

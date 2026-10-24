@@ -1196,3 +1196,172 @@
 
   .pr--lg { font-size: 22px; }
 }
+
+/* ==========================================================================
+   Live results: provenance, freshness, booking
+   ========================================================================== */
+
+.badge--live {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: transparent;
+}
+
+.badge--live svg {
+  width: 12px;
+  height: 12px;
+}
+
+.source-line[data-live="true"] svg {
+  color: var(--success);
+}
+
+.airline-logo[data-img="true"] {
+  background: #fff;
+  padding: 5px;
+}
+
+.airline-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.fcard__pending {
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.fact--warn {
+  color: var(--warning);
+}
+
+.fact--warn svg {
+  color: var(--warning);
+}
+
+.results__stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  background: var(--warning-soft);
+  font-size: var(--fs-sm);
+}
+
+.results__stale > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--warning);
+}
+
+.results__stale span {
+  flex: 1;
+}
+
+/* Booking dialog */
+.bk {
+  display: grid;
+  gap: 14px;
+}
+
+.bk__loading {
+  display: grid;
+  gap: 8px;
+}
+
+.bk__fail {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  font-size: var(--fs-sm);
+}
+
+.bk__list {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+}
+
+.bk__row,
+.bk__opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+}
+
+.bk__row {
+  transition: border-color var(--dur-base), background-color var(--dur-base);
+}
+
+.bk__row:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.bk__row > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+
+.bk__main {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bk__main b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 620;
+}
+
+.bk__main span {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.bk__price {
+  display: grid;
+  justify-items: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.bk__price span {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.bk__note,
+.bk__fine {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.55;
+}
+
+@media (max-width: 560px) {
+  .bk__opt {
+    flex-wrap: wrap;
+  }
+
+  .bk__opt .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
