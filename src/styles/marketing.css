@@ -947,27 +947,48 @@ html:has(.mk) {
 }
 
 /* Sort */
-.ff__select {
-  padding: 0;
-}
-
-.ff__select select {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 100%;
-  padding: 0 28px 0 10px;
-  border: 0;
-  outline: none;
-  background: transparent;
+button.ff__select {
+  justify-content: space-between;
+  min-width: 138px;
   color: #d6d7de;
   font-size: 12.5px;
-  cursor: pointer;
 }
 
-.ff__select svg {
-  position: absolute;
-  right: 8px;
-  pointer-events: none;
+button.ff__select:hover,
+button.ff__select[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  color: #f1f1f5;
+}
+
+button.ff__select svg {
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+
+button.ff__select[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.ff__menu--sort {
+  left: auto;
+  right: 12px;
+  top: calc(100% - 4px);
+  width: 164px;
+}
+
+.ff__menu--sort li {
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+.ff__menu--sort li[aria-selected="true"] {
+  color: var(--accent-hi);
+  font-weight: 600;
+}
+
+.ff__menu--sort li svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Tabs: they squeeze as you open more */
@@ -1027,8 +1048,7 @@ html:has(.mk) {
 
 /* Touch screens: 16px text keeps phones from zooming into a field. */
 @media (pointer: coarse) {
-  .ff__input input,
-  .ff__select select {
+  .ff__input input {
     font-size: 16px;
   }
 }
@@ -1717,8 +1737,9 @@ html:has(.mk) {
 /* ---------- Color scene, calm, start ---------- */
 
 /* Copy and picker sit above the orb, so they leave upward without crossing it. */
+/* Taller than the screen: the copy and picker scroll away while the orb settles alone in the centre. */
 .mkf-color {
-  height: 100vh;
+  height: 185vh;
   display: grid;
   grid-template-rows: auto auto 1fr;
   justify-items: center;
@@ -2100,6 +2121,7 @@ html:has(.mk) {
   }
 
   .mkf-color {
+    height: 175svh;
     padding: 92px 20px 5vh;
   }
 

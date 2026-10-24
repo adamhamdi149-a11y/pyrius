@@ -182,7 +182,8 @@ export function Landing() {
         const HERO = () => (desktop ? { x: W() * 0.21, y: H() * 0.04, k: s(Math.min(W() * 0.34, H() * 0.6, 520)) } : { x: 0, y: -H() * 0.23, k: s(Math.min(W() * 0.5, 230)) });
         const MID = () => (desktop ? { x: 0, y: -H() * 0.06, k: s(Math.min(W() * 0.2, H() * 0.36, 340)) } : { x: 0, y: H() * 0.08, k: s(W() * 0.38) });
         const CALM = () => (desktop ? { x: 0, y: -H() * 0.12, k: s(Math.min(W() * 0.22, H() * 0.38, 360)) } : { x: 0, y: -H() * 0.12, k: s(W() * 0.46) });
-        const COLOR = () => (desktop ? { x: 0, y: H() * 0.17, k: s(Math.min(W() * 0.24, H() * 0.38, 360)) } : { x: 0, y: H() * 0.2, k: s(Math.min(W() * 0.52, H() * 0.3)) });
+        const COLOR = () => (desktop ? { x: 0, y: H() * 0.26, k: s(Math.min(W() * 0.22, H() * 0.34, 330)) } : { x: 0, y: H() * 0.24, k: s(Math.min(W() * 0.5, H() * 0.28)) });
+        const ALONE = () => (desktop ? { x: 0, y: 0, k: s(Math.min(W() * 0.26, H() * 0.42, 390)) } : { x: 0, y: 0, k: s(Math.min(W() * 0.62, H() * 0.34)) });
         const OUT = () => ({ x: 0, y: -H() * 0.62, k: CALM().k * 0.6 });
         const END = () => (desktop ? { x: 0, y: -H() * 0.31, k: s(Math.min(W() * 0.14, H() * 0.2, 220)) } : { x: 0, y: -H() * 0.33, k: s(Math.min(W() * 0.26, H() * 0.14)) });
         const DOCK = () => {
@@ -353,10 +354,6 @@ export function Landing() {
           });
         }
 
-        // #color — the orb holds still while the visitor picks its color
-        const colorST = ScrollTrigger.create({ trigger: "#color", start: "top top", end: () => `+=${H() * 0.9}`, pin: true, invalidateOnRefresh: true });
-        const C = () => colorST.start;
-
         // ===== AMBIENT: the orb's journey (created after the pins) =====
         type Station = () => { x: number; y: number; k: number };
         type Span = Pick<ScrollTrigger.Vars, "trigger" | "start" | "end">;
@@ -398,10 +395,12 @@ export function Landing() {
         gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 1 }, { autoAlpha: 0, ease: "none", immediateRender: false, scrollTrigger: handoff });
         gsap.fromTo(".mkf-dock-orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", scrollTrigger: { ...handoff } });
 
-        // It returns for the color scene, then settles over the calm line.
-        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { start: () => C() - H() * 0.9, end: () => C() - H() * 0.25, scrub: true, invalidateOnRefresh: true } });
-        leg({ start: () => C() - H(), end: () => C() }, () => ({ ...COLOR(), y: H() * 0.55 }), COLOR);
-        leg({ trigger: "#calm", start: "top bottom", end: "top top" }, COLOR, CALM);
+        // It rises in well below the color picker, then settles alone in the centre of the screen
+        // as the copy and picker scroll away, and finally lifts over the calm line.
+        gsap.fromTo(".mkf-orbwrap__orb", { autoAlpha: 0 }, { autoAlpha: 1, ease: "none", immediateRender: false, scrollTrigger: { trigger: "#color", start: "top bottom", end: "top 30%", scrub: true } });
+        leg({ trigger: "#color", start: "top bottom", end: "top top" }, () => ({ ...COLOR(), y: H() * 0.6 }), COLOR);
+        leg({ trigger: "#color", start: "top top", end: "bottom bottom" }, COLOR, ALONE);
+        leg({ trigger: "#calm", start: "top bottom", end: "top top" }, ALONE, CALM);
 
         // Out of the way for pricing, the comparison and the FAQ; back for the final call.
         leg({ trigger: "#pricing", start: "top bottom", end: "top 20%" }, CALM, OUT);

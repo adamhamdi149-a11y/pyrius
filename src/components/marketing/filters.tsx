@@ -1,5 +1,5 @@
 "use client";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, MapPin, Minus, Plane, Plus, Search, Users } from "lucide-react";
+import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, MapPin, Minus, Plane, Plus, Search, Users } from "lucide-react";
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { AIRPORTS } from "@/lib/data/catalog";
 import type { Airport } from "@/lib/types";
@@ -422,22 +422,86 @@ function StopsField() {
 
 /* ---------- Sort ---------- */
 
+const SORTS: [Sort, string][] = [
+  ["recommended", "Recommended"],
+  ["cheapest", "Cheapest"],
+  ["fastest", "Fastest"],
+];
+
+/** A listbox drawn in the same dark glass as the other pieces (the browser's own menu ignores it). */
 function SortField() {
   const { f, set } = useFilters();
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
   const id = useId();
+  const current = Math.max(0, SORTS.findIndex(([v]) => v === f.sort));
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  const show = () => {
+    setHi(current);
+    setOpen(true);
+  };
+  const choose = (i: number) => {
+    set({ sort: SORTS[i][0] });
+    setOpen(false);
+  };
+
   return (
-    <div className="ff ff--row">
-      <label className="ff__label" htmlFor={id}>
+    <div className="ff ff--row" ref={box}>
+      <span className="ff__label" id={`${id}-l`}>
         Sort by
-      </label>
-      <span className="ff__select">
-        <select id={id} value={f.sort} onChange={(e) => set({ sort: e.target.value as Sort })}>
-          <option value="recommended">Recommended</option>
-          <option value="cheapest">Cheapest</option>
-          <option value="fastest">Fastest</option>
-        </select>
-        <ChevronDown />
       </span>
+      <button
+        type="button"
+        className="ff__select"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={`${id}-l ${id}-v`}
+        aria-controls={`${id}-list`}
+        aria-activedescendant={open ? `${id}-o${hi}` : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            if (!open) return show();
+            setHi((h) => (h + (e.key === "ArrowDown" ? 1 : SORTS.length - 1)) % SORTS.length);
+          } else if ((e.key === "Enter" || e.key === " ") && open) {
+            e.preventDefault();
+            choose(hi);
+          } else if (e.key === "Escape") setOpen(false);
+        }}
+      >
+        <span id={`${id}-v`}>{SORTS[current][1]}</span>
+        <ChevronDown />
+      </button>
+      {open && (
+        <ul className="ff__menu ff__menu--sort" id={`${id}-list`} role="listbox" aria-labelledby={`${id}-l`}>
+          {SORTS.map(([v, label], i) => (
+            <li
+              key={v}
+              id={`${id}-o${i}`}
+              role="option"
+              aria-selected={i === current}
+              data-hi={i === hi}
+              onMouseEnter={() => setHi(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => choose(i)}
+            >
+              {label}
+              {i === current && <Check />}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
