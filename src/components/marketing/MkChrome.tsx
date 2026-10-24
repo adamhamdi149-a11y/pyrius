@@ -122,7 +122,7 @@ export function MkFooter() {
             <span>Legal</span>
             <Link href="/legal/terms">Terms of Service</Link>
             <Link href="/legal/privacy">Privacy Policy</Link>
-            <a href="mailto:privacy@pyrius.app">privacy@pyrius.app</a>
+            <a href="mailto:contact@pyrius.app">contact@pyrius.app</a>
           </div>
         </nav>
       </div>
