@@ -45,6 +45,14 @@ export interface TripPreferences {
   stayBudgetPerNight?: number;
   // Car
   carMode?: "rental" | "agencies" | "dealerships";
+  // Kept by the AI concierge
+  tripType?: "round" | "oneway";
+  cabin?: "economy" | "premium_economy" | "business" | "first";
+  departureTime?: "morning" | "afternoon" | "evening";
+  /** When the user gave a per-person budget; `budget` then holds the total for everyone. */
+  budgetPerPerson?: number;
+  /** Other preferences in the user's words (short). */
+  notes?: string;
   // Conversation bookkeeping (not shown to the user)
   awaiting?: AwaitField;
   askedPrefs?: boolean;
@@ -253,7 +261,16 @@ export interface ChatMessage {
   at: string;
   chips?: Chip[];
   attachment?: Attachment;
+  /** Replies from the AI concierge can carry several result sets (e.g. hotels and cars). */
+  attachments?: Attachment[];
 }
+
+export const messageAttachments = (m: Pick<ChatMessage, "attachment" | "attachments">): Attachment[] => m.attachments ?? (m.attachment ? [m.attachment] : []);
+
+/** Changes the AI asked for that the client applies through its own store (validated on the server first). */
+export type ClientAction =
+  | { type: "save"; offer: AnyOffer }
+  | { type: "track"; offerId: string; offer?: AnyOffer; targetPrice: number };
 
 export type AgentStage =
   | "collecting"
@@ -280,6 +297,8 @@ export interface AgentReply {
   prefs: TripPreferences;
   stage: AgentStage;
   attachment?: Attachment;
+  attachments?: Attachment[];
+  actions?: ClientAction[];
   title?: string;
   engine: "demo" | "openai";
 }

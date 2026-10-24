@@ -6,14 +6,17 @@ import { OrbStage } from "@/components/ai/OrbStage";
 import { CarResults, BusinessDirectory } from "@/components/results/CarResults";
 import { FlightResults } from "@/components/results/FlightResults";
 import { HotelResults } from "@/components/results/HotelResults";
+import { offerTitle } from "@/components/results/OfferActions";
+import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
 import { airportByCode } from "@/lib/data/catalog";
 import type { MessageKey } from "@/lib/i18n";
 import { newConversation, useStore } from "@/lib/store/AppStore";
-import type { AgentReply, Attachment, ChatMessage, Chip, ChipAction, Conversation, FlightSearchParams, OfferKind, TripPreferences } from "@/lib/types";
+import { getSupabase } from "@/lib/supabase/client";
+import { messageAttachments, type AgentReply, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type OfferKind, type TripPreferences } from "@/lib/types";
 import { DURATION, stagger, type OrbMood } from "@/lib/motion";
 import { takePendingPrompt } from "@/lib/pendingPrompt";
-import { cx, formatRange, uid } from "@/lib/utils";
+import { cx, formatRange, money, toISODate, uid } from "@/lib/utils";
 import { Composer, type ComposerHandle, type ComposerState } from "./Composer";
 import { EditSearchDialog } from "./EditSearchDialog";
 import { AssistantMessage, ErrorRow, Thinking, UserMessage } from "./Messages";
@@ -21,11 +24,11 @@ import { TripBrief } from "./TripBrief";
 
 type QuickPrefs = Pick<TripPreferences, "nonstopOnly" | "carryOnOnly" | "flexibleDates">;
 
-const SUGGESTIONS: { key: MessageKey; sub: MessageKey; icon: typeof Sparkles; en: string; fr: string }[] = [
-  { key: "suggest.cheap", sub: "suggest.cheapSub", icon: PiggyBank, en: "Find me a cheap getaway for a long weekend", fr: "Trouve-moi une escapade pas chère pour un long week-end" },
-  { key: "suggest.japan", sub: "suggest.japanSub", icon: Sparkles, en: "Plan a trip to Japan", fr: "Planifie un voyage au Japon" },
-  { key: "suggest.dates", sub: "suggest.datesSub", icon: CalendarSearch, en: "I already know my dates — help me find the best flights", fr: "Je connais déjà mes dates, aide-moi à trouver les meilleurs vols" },
-  { key: "suggest.warm", sub: "suggest.warmSub", icon: Palmtree, en: "Discover somewhere warm in February", fr: "Découvre un endroit chaud en février" },
+const SUGGESTIONS: { key: MessageKey; icon: typeof Sparkles; en: string; fr: string }[] = [
+  { key: "suggest.cheap", icon: PiggyBank, en: "Find me a cheap getaway for a long weekend", fr: "Trouve-moi une escapade pas chère pour un long week-end" },
+  { key: "suggest.japan", icon: Sparkles, en: "Plan a trip to Japan", fr: "Planifie un voyage au Japon" },
+  { key: "suggest.dates", icon: CalendarSearch, en: "I already know my dates — help me find the best flights", fr: "Je connais déjà mes dates, aide-moi à trouver les meilleurs vols" },
+  { key: "suggest.warm", icon: Palmtree, en: "Discover somewhere warm in February", fr: "Découvre un endroit chaud en février" },
 ];
 
 const EXAMPLES = {
@@ -58,7 +61,8 @@ export function Assistant() {
   convRef.current = conv;
 
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<{ retry: () => void } | null>(null);
+  const [error, setError] = useState<{ retry: () => void; message?: string } | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
   const [listening, setListening] = useState(false);
@@ -71,6 +75,9 @@ export function Assistant() {
   const [leaving, setLeaving] = useState(false);
   const composer = useRef<ComposerHandle>(null);
   const welcomeAnchor = useRef<HTMLDivElement>(null);
+  const focusAnchor = useRef<HTMLDivElement>(null);
+  const dock = useRef<HTMLDivElement>(null);
+  const toast = useToast();
   const orbSlot = useRef<HTMLSpanElement>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -117,6 +124,16 @@ export function Assistant() {
     if (el) el.scrollTop = emptyRef.current ? 0 : el.scrollHeight;
   }, [store.activeId]);
 
+  // The focus orb centres in the space above the composer, which grows as you type.
+  useEffect(() => {
+    const d = dock.current;
+    const host = d?.parentElement;
+    if (!d || !host) return;
+    const ro = new ResizeObserver(() => host.style.setProperty("--dock-h", `${d.offsetHeight}px`));
+    ro.observe(d);
+    return () => ro.disconnect();
+  }, []);
+
   // Follow new content only while the reader is at the bottom.
   useEffect(() => {
     const el = scroller.current;
@@ -146,7 +163,7 @@ export function Assistant() {
   // When results arrive, bring the start of that answer into view instead of following to the bottom.
   const onTyped = (m: ChatMessage) => {
     setTyping(false);
-    if (!m.attachment) return;
+    if (!messageAttachments(m).length) return;
     stick.current = false;
     setTimeout(() => {
       const el = scroller.current;
@@ -159,6 +176,62 @@ export function Assistant() {
 
   const save = (c: Conversation) => store.upsertConversation({ ...c, updatedAt: new Date().toISOString() });
 
+  // What the AI needs to know about this conversation and the user's saved offers.
+  const contextFor = (c: Conversation) => {
+    const latest = <T extends Attachment["type"]>(type: T) => {
+      for (let i = c.messages.length - 1; i >= 0; i--) {
+        const hit = messageAttachments(c.messages[i]).findLast((a) => a.type === type);
+        if (hit) return hit as Extract<Attachment, { type: T }>;
+      }
+      return undefined;
+    };
+    const flights = latest("flights");
+    const hotels = latest("hotels");
+    const cars = latest("cars");
+    const tracked = new Map(store.trackers.map((t) => [t.offerId, t]));
+    return {
+      results: {
+        flights: flights && { params: flights.params, sort: flights.filters?.sort, nonstopOnly: flights.filters?.nonstopOnly, carryOnOnly: flights.filters?.carryOnOnly },
+        hotels: hotels?.params,
+        cars: cars?.params,
+      },
+      saved: store.saved.slice(0, 60).map((s) => ({
+        id: s.id,
+        kind: s.kind,
+        label: offerTitle(s.data),
+        price: s.data.offer.totalPrice,
+        currency: s.data.offer.currency,
+        tracked: tracked.has(s.id),
+        target: tracked.get(s.id)?.targetPrice,
+      })),
+      plan: store.subscription.plan,
+      counts: { saved: store.saved.length, trackers: store.trackers.filter((t) => t.status !== "paused").length },
+    };
+  };
+
+  // Saves and price tracking the AI asked for go through the same store as the Save and Track buttons.
+  const applyActions = (actions: ClientAction[] | undefined, conversationId: string) => {
+    for (const a of actions ?? []) {
+      if (a.type === "save") {
+        const r = store.saveOffer(a.offer, conversationId);
+        if (!r.ok) toast({ tone: "info", title: L("Plan limit reached", "Limite du forfait atteinte"), description: r.message });
+        else toast({ tone: "save", title: L("Saved to your offers", "Enregistré dans vos offres"), description: offerTitle(a.offer), action: { label: L("View", "Voir"), onClick: () => router.push("/saved") } });
+      } else {
+        const o = a.offer ?? store.saved.find((s) => s.id === a.offerId)?.data;
+        if (!o) continue;
+        const r = store.startTracking(o, a.targetPrice, conversationId);
+        if (!r.ok) toast({ tone: "info", title: L("Plan limit reached", "Limite du forfait atteinte"), description: r.message });
+        else
+          toast({
+            tone: "save",
+            title: L("Tracking this price", "Suivi du prix activé"),
+            description: `${offerTitle(o)} · ${L("target", "cible")} ${money(a.targetPrice, o.offer.currency, settings.locale)}`,
+            action: { label: L("View", "Voir"), onClick: () => router.push("/tracking") },
+          });
+      }
+    }
+  };
+
   const request = useCallback(
     async (c: Conversation, text: string, action?: ChipAction) => {
       setPending(true);
@@ -166,9 +239,12 @@ export function Assistant() {
       setFlash(null);
       const started = Date.now();
       try {
+        const token = store.auth.mode === "cloud" ? (await getSupabase()?.auth.getSession())?.data.session?.access_token : undefined;
+        // The newest message is the one being sent; earlier ones are the history.
+        const earlier = c.messages.at(-1)?.role === "user" ? c.messages.slice(0, -1) : c.messages;
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({
             message: text,
             action,
@@ -176,14 +252,21 @@ export function Assistant() {
             stage: c.stage,
             locale: settings.locale,
             homeAirport: settings.homeAirport,
-            history: c.messages.slice(-8).map((m) => ({ role: m.role, content: m.text })),
+            today: toISODate(new Date()),
+            history: earlier.slice(-12).map((m) => ({ role: m.role, content: m.text })),
+            ...contextFor(c),
           }),
         });
-        if (!res.ok) throw new Error(String(res.status));
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(typeof body.error === "string" ? body.error : "");
+        }
         const reply: AgentReply = await res.json();
         await new Promise((r) => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
-        const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: reply.reply, chips: reply.chips, attachment: reply.attachment, at: new Date().toISOString() };
+        const attachments = reply.attachments ?? (reply.attachment ? [reply.attachment] : undefined);
+        const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: reply.reply, chips: reply.chips, attachments, at: new Date().toISOString() };
         setEngine(reply.engine);
+        applyActions(reply.actions, c.id);
         // Calm success: a short pulse from the orb, then back to idle.
         setPulseKey((k) => k + 1);
         setFlash("success");
@@ -192,15 +275,15 @@ export function Assistant() {
         setAnimatingId(ai.id);
         setTyping(true);
         save({ ...c, messages: [...c.messages, ai], prefs: reply.prefs, stage: reply.stage, title: reply.title ?? c.title });
-      } catch {
+      } catch (err) {
         setFlash("error");
-        setError({ retry: () => request(c, text, action) });
+        setError({ retry: () => request(c, text, action), message: (err as Error).message || undefined });
       } finally {
         setPending(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.locale, settings.homeAirport],
+    [settings.locale, settings.homeAirport, store.saved, store.trackers, store.subscription, store.auth.mode],
   );
 
   const send = (text: string, action?: ChipAction) => {
@@ -212,6 +295,7 @@ export function Assistant() {
     }
     if (!base.messages.length) {
       // Welcome dissolves while the orb flies down into the composer.
+      setDrafting(false);
       setLeaving(true);
       setTimeout(() => setLeaving(false), DURATION.welcomeLeave);
     }
@@ -298,8 +382,10 @@ export function Assistant() {
   const empty = !conv || conv.messages.length === 0;
   const showWelcome = empty || leaving;
   emptyRef.current = showWelcome;
+  // Typing on the welcome screen clears everything but the orb, which moves to the centre.
+  const focus = drafting && empty && !leaving;
   const lastId = conv?.messages.at(-1)?.id;
-  const mood: OrbMood = listening ? "listening" : pending ? "thinking" : flash ?? "idle";
+  const mood: OrbMood = listening || focus ? "listening" : pending ? "thinking" : flash ?? "idle";
   const composerState: ComposerState = pending ? "processing" : flash ?? "idle";
   const savedKinds = useMemo(() => new Set<OfferKind>(store.saved.filter((s) => s.conversationId === conv?.id).map((s) => s.kind)), [store.saved, conv?.id]);
 
@@ -322,8 +408,14 @@ export function Assistant() {
   );
 
   return (
-    <div className="chat" data-mood={mood}>
-      <OrbStage mood={mood} pulseKey={pulseKey} anchor={showWelcome && !leaving ? welcomeAnchor : orbSlot} anchorKey={showWelcome && !leaving ? "welcome" : "dock"} />
+    <div className="chat" data-mood={mood} data-focus={focus}>
+      <OrbStage
+        mood={mood}
+        pulseKey={pulseKey}
+        anchor={focus ? focusAnchor : showWelcome && !leaving ? welcomeAnchor : orbSlot}
+        anchorKey={focus ? "focus" : showWelcome && !leaving ? "welcome" : "dock"}
+      />
+      {showWelcome && <div className="orb-anchor chat__focus-orb" ref={focusAnchor} aria-hidden="true" />}
       {showWelcome && <div className="chat__bar">{modePill}</div>}
 
       <div className="chat__scroll" ref={scroller} onScroll={onScroll}>
@@ -331,7 +423,7 @@ export function Assistant() {
         {showWelcome && <OrbitBackdrop leaving={leaving} />}
         <div className={showWelcome ? "chat__inner chat__inner--empty" : "chat__inner"} ref={inner}>
           {showWelcome ? (
-            <section className={cx("welcome", leaving && "welcome--leave")} aria-labelledby="welcome-title">
+            <section className={cx("welcome", leaving && "welcome--leave")} aria-labelledby="welcome-title" aria-hidden={focus || undefined}>
               <div className="orb-anchor welcome__orb" ref={welcomeAnchor} />
               <span className="welcome__eyebrow">
                 <i aria-hidden="true" />
@@ -340,10 +432,9 @@ export function Assistant() {
               <h1 id="welcome-title" className="t-display welcome__title">
                 {t("welcome.title")}
               </h1>
-              <p className="welcome__sub">{t("welcome.subtitle")}</p>
               <div className="suggest m-stagger">
-                {SUGGESTIONS.map(({ key, sub, icon: Icon, en, fr }, i) => (
-                  <button key={key} className="suggest__card m-press" data-glow style={stagger(i + 2)} onClick={() => send(settings.locale === "fr" ? fr : en)} disabled={pending || leaving}>
+                {SUGGESTIONS.map(({ key, icon: Icon, en, fr }, i) => (
+                  <button key={key} className="suggest__card m-press" data-glow style={stagger(i + 2)} onClick={() => send(settings.locale === "fr" ? fr : en)} disabled={pending || leaving || focus}>
                     <span className="suggest__icon">
                       <Icon />
                     </span>
@@ -351,7 +442,6 @@ export function Assistant() {
                       <span className="suggest__title" style={{ display: "block" }}>
                         {t(key)}
                       </span>
-                      <span className="suggest__sub">{t(sub)}</span>
                     </span>
                     <ArrowUpRight className="suggest__arrow" />
                   </button>
@@ -371,7 +461,11 @@ export function Assistant() {
                     showChips={m.id === lastId && !pending}
                     onChip={onChip}
                   >
-                    {m.attachment && renderAttachment(m.attachment, conv!)}
+                    {messageAttachments(m).map((a, i) => (
+                      <div key={`${a.type}-${i}`} style={{ display: "contents" }}>
+                        {renderAttachment(a, conv!)}
+                      </div>
+                    ))}
                   </AssistantMessage>
                 </div>
               ),
@@ -381,7 +475,7 @@ export function Assistant() {
           {error && !showWelcome && (
             <ErrorRow
               text={L("Pyrius couldn't answer that", "Pyrius n'a pas pu répondre")}
-              hint={L("The assistant service didn't respond. Nothing was lost — retry when you're ready.", "Le service n'a pas répondu. Rien n'est perdu — réessayez quand vous voulez.")}
+              hint={error.message ?? L("The assistant service didn't respond. Nothing was lost — retry when you're ready.", "Le service n'a pas répondu. Rien n'est perdu — réessayez quand vous voulez.")}
               retryLabel={t("chat.retry")}
               onRetry={error.retry}
             />
@@ -396,7 +490,7 @@ export function Assistant() {
         </button>
       )}
 
-      <div className="dock">
+      <div className="dock" ref={dock}>
         <Composer
           ref={composer}
           onSend={(v) => send(v)}
@@ -409,6 +503,7 @@ export function Assistant() {
           orbSlot={orbSlot}
           docked={!(showWelcome && !leaving)}
           examples={EXAMPLES[settings.locale]}
+          onDraftChange={setDrafting}
         />
         <p className="composer__foot" data-state={listening ? "listening" : composerState} aria-live="polite">
           <i aria-hidden="true" />

@@ -30,6 +30,8 @@ interface Props {
   examples?: string[];
   /** True while the live orb sits in the composer. */
   docked?: boolean;
+  /** Called when the composer goes from empty to having text, and back. */
+  onDraftChange?: (hasText: boolean) => void;
 }
 
 // Minimal typing for the Web Speech API (not in lib.dom for all browsers).
@@ -45,7 +47,7 @@ interface SpeechRec {
   onend: (() => void) | null;
 }
 
-export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ onSend, busy, followUp, prefs, onPrefsChange, onListeningChange, state, orbSlot, examples, docked }, ref) {
+export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ onSend, busy, followUp, prefs, onPrefsChange, onListeningChange, state, orbSlot, examples, docked, onDraftChange }, ref) {
   const { t, settings } = useStore();
   const toast = useToast();
   const [text, setText] = useState("");
@@ -76,6 +78,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
   }, [text]);
 
   useEffect(() => onListeningChange?.(listening), [listening, onListeningChange]);
+  const hasText = text.trim().length > 0;
+  useEffect(() => onDraftChange?.(hasText), [hasText, onDraftChange]);
 
   // Voice is offered only where the browser can actually do it.
   useEffect(() => {

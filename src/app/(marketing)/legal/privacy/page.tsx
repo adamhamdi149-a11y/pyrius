@@ -86,8 +86,16 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Your messages are processed to work out the details of your trip. Today this happens on our own servers. If we connect an external AI model provider, the
-          text of your messages would be sent to that provider only to extract trip details, and we will update this policy before that happens.
+          The assistant is powered by <strong>OpenAI</strong>. To answer you, we send OpenAI your latest message, up to the last twelve messages of the same
+          conversation, the trip details found so far (such as destinations, dates, travelers, budget and preferences), the home airport from your settings, and a
+          short summary of the results on screen and of your saved offers (their titles and prices). Your name, email address and account identifiers are not
+          included.
+        </p>
+        <p>
+          OpenAI uses this content only to write the assistant&apos;s replies and to choose which Pyrius action to run, such as a flight search or saving an
+          offer; every action is checked by our servers before it runs. Under its terms for business use of its API, OpenAI does not use this content to train its
+          models, and it may keep it for up to 30 days to detect abuse before deleting it. The AI never sets prices or creates offers; results come from travel
+          data, and the trip details the assistant understood are shown to you so you can check and change them.
         </p>
         <p>
           The assistant does not make decisions about you that produce legal or similarly significant effects. Flight, hotel and car results shown in Pyrius may be
@@ -104,13 +112,19 @@ const sections: LegalSection[] = [
         <p>We share personal information only with providers that help us operate Pyrius, under contracts that limit their use of it:</p>
         <ul>
           <li>
-            <strong>Supabase</strong> — database and authentication, including sign-in and confirmation emails.
+            <strong>Supabase</strong> — database and authentication.
           </li>
           <li>
             <strong>Vercel</strong> — website and application hosting.
           </li>
           <li>
             <strong>Stripe</strong> — subscription billing and payment processing.
+          </li>
+          <li>
+            <strong>OpenAI</strong> — understanding trip details from your messages, as described above.
+          </li>
+          <li>
+            <strong>Resend</strong> — delivering account emails such as sign-up confirmations and sign-in links.
           </li>
           <li>
             <strong>Google and Apple</strong> — only if you choose to sign in with them.

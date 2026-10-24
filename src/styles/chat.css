@@ -1356,3 +1356,61 @@
     font-size: 11px;
   }
 }
+
+/* ==========================================================================
+   Focus: typing on the welcome screen leaves only the orb, centred
+   ========================================================================== */
+
+.chat__focus-orb {
+  position: absolute;
+  left: 50%;
+  top: calc((100% - var(--dock-h, 170px)) / 2);
+  width: clamp(150px, 26vh, 240px);
+  height: clamp(150px, 26vh, 240px);
+  translate: -50% -50%;
+  pointer-events: none;
+}
+
+.welcome > *:not(.welcome__orb),
+.chat__bar,
+.composer__foot {
+  transition: opacity 420ms var(--ease-standard), transform 620ms var(--ease-out-expo), filter 420ms var(--ease-standard);
+}
+
+.chat[data-focus="true"] .welcome > *:not(.welcome__orb) {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.985);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* The cards leave a beat after the title, in the order they arrived. */
+.chat[data-focus="true"] .suggest {
+  transition-delay: 40ms;
+}
+
+.chat[data-focus="true"] .ambient,
+.chat[data-focus="true"] .chat__bar,
+.chat[data-focus="true"] .composer__foot {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* With the subtitle gone, the cards sit a little closer to the title. */
+.welcome .suggest {
+  margin-top: 36px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome > *:not(.welcome__orb),
+  .chat__bar,
+  .composer__foot {
+    transition: opacity 200ms linear;
+  }
+
+  .chat[data-focus="true"] .welcome > *:not(.welcome__orb) {
+    transform: none;
+    filter: none;
+  }
+}
+

@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
-import { runAgent, type Extracted } from "@/lib/ai/agent";
+import { runAgent } from "@/lib/ai/agent";
+import { ConciergeError, runConcierge, type ConciergeRequest } from "@/lib/ai/concierge";
+import { allow } from "@/lib/ai/concierge/rateLimit";
+import type { SavedSummary } from "@/lib/ai/concierge/tools";
 import { AIRPORTS } from "@/lib/data/catalog";
-import type { AgentStage, ChipAction, Locale, TripPreferences } from "@/lib/types";
+import { PLANS } from "@/lib/plans";
+import { getUserFromRequest } from "@/lib/supabase/server";
+import type { AgentStage, CarSearchParams, ChipAction, FlightSearchParams, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
+import { toISODate } from "@/lib/utils";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 interface Body {
   message: string;
@@ -12,60 +19,118 @@ interface Body {
   stage: AgentStage;
   locale?: Locale;
   homeAirport?: string;
+  today?: string;
   history?: { role: "user" | "assistant"; content: string }[];
+  results?: ConciergeRequest["results"];
+  saved?: SavedSummary[];
+  plan?: PlanId;
+  counts?: { saved?: number; trackers?: number };
 }
 
-const CODES = AIRPORTS.map((a) => `${a.code} (${a.city})`).join(", ");
+const CODES = new Set(AIRPORTS.map((a) => a.code));
+const STAGES: AgentStage[] = ["collecting", "flights", "offer-hotels", "hotels", "offer-cars", "cars", "done"];
+const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const intIn = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined);
+const numIn = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : undefined);
+const oneOf = <T extends string>(v: unknown, list: readonly T[]) => (typeof v === "string" && (list as readonly string[]).includes(v) ? (v as T) : undefined);
+const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+const code = (v: unknown) => (typeof v === "string" && CODES.has(v) ? v : undefined);
 
-/** Ask the model only to extract fields. Output is validated before use; it never produces offers or prices. */
-async function extractWithOpenAI(body: Body): Promise<Extracted | null> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    signal: AbortSignal.timeout(12000),
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You extract travel search fields from the user's latest message. Today is ${new Date().toISOString().slice(0, 10)}. Supported airports: ${CODES}. Map countries/regions to the closest supported airport. Return JSON with any of: originCode, destinationCode, departDate (YYYY-MM-DD, future), returnDate, durationDays, flexibleDates, adults, children, budget (number, total flight budget, 0 = no budget), nonstopOnly, carryOnOnly, priority ("cheapest"|"fastest"|"balanced"), wantsWarm, rooms, stayBudgetPerNight. Omit unknown fields. Never invent values the user did not state. Current known trip: ${JSON.stringify(body.prefs)}. The assistant is currently waiting for: ${body.prefs.awaiting ?? "nothing specific"}.`,
-        },
-        ...(body.history ?? []).slice(-6),
-        { role: "user", content: body.message },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-  const data = await res.json();
-  const raw = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
-  const codes = new Set(AIRPORTS.map((a) => a.code));
-  const today = new Date().toISOString().slice(0, 10);
-  const date = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && v > today ? v : undefined);
-  const num = (v: unknown, max: number) => (typeof v === "number" && v >= 0 && v <= max ? Math.round(v) : undefined);
-  const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
-  const e: Extracted = {
-    originCode: codes.has(raw.originCode) ? raw.originCode : undefined,
-    destinationCode: codes.has(raw.destinationCode) ? raw.destinationCode : undefined,
-    departDate: date(raw.departDate),
-    returnDate: date(raw.returnDate),
-    durationDays: num(raw.durationDays, 90) || undefined,
-    adults: num(raw.adults, 9) || undefined,
-    children: num(raw.children, 6),
-    budget: num(raw.budget, 100000),
-    flexibleDates: bool(raw.flexibleDates),
-    nonstopOnly: bool(raw.nonstopOnly),
-    carryOnOnly: bool(raw.carryOnOnly),
-    wantsWarm: bool(raw.wantsWarm),
-    rooms: num(raw.rooms, 9) || undefined,
-    stayBudgetPerNight: num(raw.stayBudgetPerNight, 20000),
-    priority: ["cheapest", "fastest", "balanced"].includes(raw.priority) ? raw.priority : undefined,
+/** The trip comes from the browser, so every field is checked before it reaches the model or a search. */
+function cleanTrip(p: unknown): TripPreferences {
+  const t = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+  const out: TripPreferences = {
+    currency: oneOf(t.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD",
+    originCode: code(t.originCode),
+    destinationCode: code(t.destinationCode),
+    departDate: isDate(t.departDate) ? t.departDate : undefined,
+    returnDate: isDate(t.returnDate) ? t.returnDate : undefined,
+    durationDays: intIn(t.durationDays, 1, 90),
+    flexibleDates: bool(t.flexibleDates),
+    adults: intIn(t.adults, 1, 9),
+    children: intIn(t.children, 0, 8),
+    budget: numIn(t.budget, 0, 200000),
+    budgetPerPerson: numIn(t.budgetPerPerson, 1, 200000),
+    nonstopOnly: bool(t.nonstopOnly),
+    carryOnOnly: bool(t.carryOnOnly),
+    priority: oneOf(t.priority, ["cheapest", "fastest", "balanced"] as const),
+    wantsWarm: bool(t.wantsWarm),
+    rooms: intIn(t.rooms, 1, 9),
+    stayType: oneOf(t.stayType, ["hotel", "apartment"] as const),
+    stayBudgetPerNight: numIn(t.stayBudgetPerNight, 0, 20000),
+    carMode: oneOf(t.carMode, ["rental", "agencies", "dealerships"] as const),
+    tripType: oneOf(t.tripType, ["round", "oneway"] as const),
+    cabin: oneOf(t.cabin, ["economy", "premium_economy", "business", "first"] as const),
+    departureTime: oneOf(t.departureTime, ["morning", "afternoon", "evening"] as const),
+    notes: typeof t.notes === "string" ? t.notes.slice(0, 200) : undefined,
+    awaiting: oneOf(t.awaiting, ["origin", "destination", "warm-pick", "dates", "duration", "travelers", "budget", "prefs", "stay-details"] as const),
+    askedPrefs: bool(t.askedPrefs),
   };
-  (Object.keys(e) as (keyof Extracted)[]).forEach((k) => e[k] === undefined && delete e[k]);
-  return e;
+  (Object.keys(out) as (keyof TripPreferences)[]).forEach((k) => out[k] === undefined && delete out[k]);
+  return out;
+}
+
+function cleanFlights(v: unknown): ConciergeRequest["results"]["flights"] {
+  const f = v as { params?: Partial<FlightSearchParams>; sort?: string; nonstopOnly?: unknown; carryOnOnly?: unknown } | undefined;
+  const p = f?.params;
+  if (!p || !code(p.originCode) || !code(p.destinationCode) || !isDate(p.departDate)) return undefined;
+  return {
+    params: {
+      originCode: p.originCode!,
+      destinationCode: p.destinationCode!,
+      departDate: p.departDate,
+      returnDate: isDate(p.returnDate) ? p.returnDate : undefined,
+      adults: intIn(p.adults, 1, 9) ?? 1,
+      children: intIn(p.children, 0, 8) ?? 0,
+      currency: oneOf(p.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD",
+    },
+    sort: oneOf(f.sort, ["price", "duration", "depart"] as const),
+    nonstopOnly: bool(f.nonstopOnly),
+    carryOnOnly: bool(f.carryOnOnly),
+  };
+}
+
+function cleanHotels(v: unknown): HotelSearchParams | undefined {
+  const h = v as Partial<HotelSearchParams> | undefined;
+  if (!h || !code(h.destinationCode) || !isDate(h.checkIn) || !isDate(h.checkOut)) return undefined;
+  return {
+    destinationCode: h.destinationCode!,
+    checkIn: h.checkIn,
+    checkOut: h.checkOut,
+    guests: intIn(h.guests, 1, 17) ?? 1,
+    rooms: intIn(h.rooms, 1, 9) ?? 1,
+    currency: oneOf(h.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD",
+    stayType: oneOf(h.stayType, ["hotel", "apartment"] as const),
+  };
+}
+
+function cleanCars(v: unknown): CarSearchParams | undefined {
+  const c = v as Partial<CarSearchParams> | undefined;
+  if (!c || !code(c.destinationCode) || !isDate(c.pickUp) || !isDate(c.dropOff)) return undefined;
+  return { destinationCode: c.destinationCode!, pickUp: c.pickUp, dropOff: c.dropOff, currency: oneOf(c.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD" };
+}
+
+/** Quick-reply buttons with a structured action become a plain request for the AI. */
+function actionText(a: ChipAction, locale: Locale) {
+  const L = (en: string, fr: string) => (locale === "fr" ? fr : en);
+  switch (a.type) {
+    case "say":
+      return a.text;
+    case "hotels":
+      return a.stayType === "apartment" ? L("Show me apartments for this trip.", "Montre-moi des appartements pour ce voyage.") : L("Show me hotels for this trip.", "Montre-moi des hôtels pour ce voyage.");
+    case "skip-hotels":
+      return L("I don't need a place to stay.", "Je n'ai pas besoin d'hébergement.");
+    case "cars":
+      return a.mode === "rental"
+        ? L("Show me rental cars for this trip.", "Montre-moi des voitures de location pour ce voyage.")
+        : a.mode === "agencies"
+          ? L("Help me find local car rental agencies.", "Aide-moi à trouver des agences de location locales.")
+          : L("Help me find car dealerships there.", "Aide-moi à trouver des concessionnaires sur place.");
+    case "skip-cars":
+      return L("I don't need a car. That's everything for now.", "Je n'ai pas besoin de voiture. C'est tout pour le moment.");
+    default:
+      return "";
+  }
 }
 
 export async function POST(req: Request) {
@@ -75,18 +140,78 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if ((!message && !body.action) || message.length > 2000) {
-    return NextResponse.json({ error: "Message must be 1–2000 characters" }, { status: 400 });
+  const locale: Locale = body.locale === "fr" ? "fr" : "en";
+  const typed = typeof body.message === "string" ? body.message.trim() : "";
+  const message = (body.action ? actionText(body.action, locale) : "") || typed;
+  if (!message || message.length > 2000) return NextResponse.json({ error: "Message must be 1–2000 characters" }, { status: 400 });
+
+  const prefs = cleanTrip(body.prefs);
+  const stage = oneOf(body.stage, STAGES) ?? "collecting";
+
+  // Without a key (local development), the built-in demo engine answers.
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json(await runAgent({ prefs, stage }, { message: typed, action: body.action, locale, homeAirport: code(body.homeAirport) }));
   }
-  const state = { prefs: body.prefs ?? { currency: "CAD" as const }, stage: body.stage ?? "collecting" };
-  const input = { message, action: body.action, locale: body.locale === "fr" ? ("fr" as const) : ("en" as const), homeAirport: body.homeAirport };
+
+  // The AI costs money per request, so in production it needs a signed-in user.
+  const supabaseOn = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const user = supabaseOn ? await getUserFromRequest(req) : null;
+  if (supabaseOn && !user && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Please sign in to chat with Pyrius." }, { status: 401 });
+  }
+  const who = user?.id ?? `ip:${req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local"}`;
+  const gate = allow(who);
+  if (!gate.ok) {
+    return NextResponse.json({ error: "You're sending messages very quickly. Give it a moment and try again.", code: "slow_down" }, { status: 429, headers: { "Retry-After": String(gate.retryAfter) } });
+  }
+
+  // Today in the user's timezone, if it's within a day of the server's.
+  const server = toISODate(new Date());
+  const today = isDate(body.today) && Math.abs(new Date(body.today).getTime() - new Date(server).getTime()) <= 864e5 ? body.today : server;
+
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .slice(-12)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 1200) }));
+
+  const saved: SavedSummary[] = (Array.isArray(body.saved) ? body.saved : [])
+    .filter((s) => s && typeof s.id === "string" && ["flight", "hotel", "car"].includes(s.kind))
+    .slice(0, 60)
+    .map((s) => ({
+      id: s.id.slice(0, 120),
+      kind: s.kind,
+      label: String(s.label ?? "").slice(0, 120),
+      price: numIn(s.price, 0, 1_000_000) ?? 0,
+      currency: String(s.currency ?? "CAD").slice(0, 3),
+      tracked: Boolean(s.tracked),
+      target: numIn(s.target, 0, 1_000_000),
+    }));
+
   try {
-    // Chip actions are already structured; only free text goes to the model.
-    const extracted = body.action && body.action.type !== "say" ? null : await extractWithOpenAI({ ...body, message: body.action?.type === "say" ? body.action.text : message });
-    if (extracted) return NextResponse.json(await runAgent(state, input, extracted, "openai"));
+    const reply = await runConcierge({
+      message,
+      history,
+      trip: prefs,
+      stage,
+      locale,
+      homeAirport: code(body.homeAirport),
+      today,
+      results: { flights: cleanFlights(body.results?.flights), hotels: cleanHotels(body.results?.hotels), cars: cleanCars(body.results?.cars) },
+      saved,
+      plan: oneOf(body.plan, PLANS.map((p) => p.id)) ?? "free",
+      counts: { saved: intIn(body.counts?.saved, 0, 100000) ?? saved.length, trackers: intIn(body.counts?.trackers, 0, 100000) ?? saved.filter((s) => s.tracked).length },
+    });
+    return NextResponse.json(reply);
   } catch (err) {
-    console.error("OpenAI extraction failed, falling back to demo parser:", err);
+    const e = err instanceof ConciergeError ? err : null;
+    if (!e) console.error("Concierge failed:", (err as Error).message);
+    const map = {
+      rate_limited: [503, "Pyrius is very busy right now. Please try again in a moment."],
+      timeout: [504, "That took too long to answer. Please try again."],
+      unavailable: [502, "Pyrius couldn't reach its AI service. Please try again."],
+      bad_response: [502, "Pyrius couldn't put an answer together. Please try again."],
+    } as const;
+    const [status, error] = map[e?.code ?? "unavailable"];
+    return NextResponse.json({ error, code: e?.code ?? "unavailable" }, { status });
   }
-  return NextResponse.json(await runAgent(state, input));
 }
