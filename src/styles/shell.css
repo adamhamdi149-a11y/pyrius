@@ -212,11 +212,45 @@
 }
 
 .recent {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   min-height: 0;
   margin: 0 -4px;
   padding: 0 4px;
-  mask-image: linear-gradient(180deg, #000 85%, transparent);
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+}
+
+.recent[data-more-above="true"] {
+  --fade-top: 28px;
+}
+
+.recent[data-more-below="true"] {
+  --fade-bottom: 40px;
+}
+
+/* The scrollbar shows while the pointer is over the list, so it reads as scrollable without clutter. */
+.recent:hover,
+.recent:focus-within {
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.recent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.recent::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: transparent;
+}
+
+.recent:hover::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
 }
 
 .recent__item {

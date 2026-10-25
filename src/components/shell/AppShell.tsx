@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { LogoMark } from "@/components/brand/Logo";
 import { PointerFX } from "@/components/fx/PointerFX";
 import { ConfirmDialog } from "@/components/ui/Dialog";
@@ -82,8 +82,30 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isActive = (href: string) => (href === "/app" ? pathname === "/app" : pathname.startsWith(href));
   const name = settings.name || (auth.mode === "cloud" ? auth.email?.split("@")[0] : "") || "Guest traveler";
   const plan = planById(subscription.plan);
-  const recent = conversations.slice(0, 14);
+  // Every stored conversation, newest first; the list scrolls inside the sidebar.
+  const recent = conversations;
   const active = conversations.find((c) => c.id === activeId);
+  const recentRef = useRef<HTMLDivElement>(null);
+  const [recentEdges, setRecentEdges] = useState({ top: false, bottom: false });
+
+  // Fade the list's edges only where there's more to scroll to.
+  useEffect(() => {
+    const el = recentRef.current;
+    if (!el) return;
+    const measure = () => {
+      const top = el.scrollTop > 2;
+      const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+      setRecentEdges((e) => (e.top === top && e.bottom === bottom ? e : { top, bottom }));
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, [recent.length]);
 
   const pageTitle =
     pathname === "/app" ? (active?.title ?? "Pyrius") : t((NAV.find((n) => n.href !== "/app" && pathname.startsWith(n.href))?.key ?? "nav.settings") as MessageKey);
@@ -128,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar__section">
           <div className="sidebar__label">{t("nav.recent")}</div>
-          <div className="recent">
+          <div className="recent" ref={recentRef} data-more-above={recentEdges.top} data-more-below={recentEdges.bottom}>
             {recent.length === 0 && <p className="recent__empty">{t("nav.noRecent")}</p>}
             {recent.map((c) => (
               <div key={c.id} className="recent__item" data-active={pathname === "/app" && c.id === activeId}>
