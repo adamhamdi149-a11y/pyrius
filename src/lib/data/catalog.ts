@@ -109,6 +109,7 @@ export const HUBS: Record<Airport["region"], string[]> = {
   latam: ["MIA", "MAD", "LIS"],
   oceania: ["LAX", "SFO", "YVR"],
   me: ["LHR", "CDG"],
+  africa: ["CDG", "LHR", "MAD", "DXB"],
 };
 
 export const NEIGHBORHOODS: Record<string, string[]> = {

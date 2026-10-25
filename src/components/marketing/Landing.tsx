@@ -2,7 +2,7 @@
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
-import { ArrowRight, ArrowUp, Bell, BookmarkCheck, Hotel } from "lucide-react";
+import { ArrowRight, ArrowUp, Bell, BookmarkCheck, ChevronDown, Hotel } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -50,6 +50,7 @@ export function Landing() {
   const [thinking, setThinking] = useState(false);
   const [mood, setMood] = useState<OrbMood>("idle");
   const [orbScale, setOrbScale] = useState(1);
+  const [more, setMore] = useState(true);
   const targetBeat = useRef(0);
   const shownRef = useRef(0);
   const jumping = useRef(false);
@@ -493,6 +494,35 @@ export function Landing() {
     return () => window.removeEventListener("pointermove", on);
   }, [staticMode]);
 
+  // Scroll cue: there's more below until the footer comes into view. On phones the hero already runs
+  // past the bottom of the screen (and the cue would sit on its chips), so it waits for the first scroll.
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const footer = document.querySelector<HTMLElement>(".mk-footer");
+      const end = footer ? footer.getBoundingClientRect().top : document.documentElement.scrollHeight - window.scrollY;
+      const pastHero = window.innerWidth >= 900 || window.scrollY > window.innerHeight * 0.6;
+      setMore(pastHero && end > window.innerHeight + 40);
+    };
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", on);
+      window.removeEventListener("resize", on);
+    };
+  }, []);
+  const scrollDown = () => {
+    const to = window.scrollY + window.innerHeight * 0.9;
+    if (lenisRef.current) lenisRef.current.scrollTo(to, { duration: 1.2 });
+    else window.scrollTo({ top: to, behavior: staticMode ? "auto" : "smooth" });
+  };
+
   // ---------- Trip picker (the hero CTA) ----------
   const pick = (id: (typeof SCRIPTS)[number]["id"]) => {
     const sc = scriptById(id);
@@ -770,6 +800,9 @@ export function Landing() {
       <Compare tryHref={tryHref} />
       <Faq />
       <FinalCta draft={draft} onDraft={updateDraft} onSubmit={go} />
+      <button type="button" className="mkf-more" data-on={more} aria-hidden={!more} tabIndex={more ? 0 : -1} aria-label="Scroll down" onClick={scrollDown}>
+        <ChevronDown />
+      </button>
       {!ready && <span className="sr-only">Loading</span>}
     </div>
   );

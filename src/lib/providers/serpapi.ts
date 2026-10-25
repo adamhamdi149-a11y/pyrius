@@ -95,6 +95,14 @@ export interface BookingOption {
   leg?: "departing" | "returning";
 }
 
+/** One way to buy the itinerary: a single ticket, or separate outbound and return tickets from two sellers. */
+export interface BookingChoice {
+  tickets: BookingOption[];
+  /** Sum of the ticket prices, when every ticket has one. */
+  total?: number;
+  currency: string;
+}
+
 async function call(params: Record<string, string>): Promise<SerpResponse> {
   const k = key();
   if (!k) throw new ProviderError("not_configured", PROVIDER);
@@ -241,9 +249,17 @@ function choice(c: SerpBookingChoice | undefined, currency: string, leg?: "depar
   };
 }
 
+/** Cheapest first; on a tie, one ticket beats two, and the airline beats a travel site. */
+function rankChoices(a: BookingChoice, b: BookingChoice) {
+  const price = (a.total ?? Infinity) - (b.total ?? Infinity);
+  if (price) return price;
+  if (a.tickets.length !== b.tickets.length) return a.tickets.length - b.tickets.length;
+  return Number(b.tickets[0].isAirline) - Number(a.tickets[0].isAirline);
+}
+
 export const serpApiFlights: FlightProvider & {
   returns(departureToken: string, p: FlightSearchParams): Promise<FlightOffer[]>;
-  bookingOptions(bookingToken: string, p: FlightSearchParams): Promise<BookingOption[]>;
+  bookingOptions(bookingToken: string, p: FlightSearchParams): Promise<BookingChoice[]>;
 } = {
   id: "serpapi",
   source: "live",
@@ -256,12 +272,20 @@ export const serpApiFlights: FlightProvider & {
     return offersFrom(await call({ ...baseParams(p), departure_token: departureToken }), p, fetchedAt, "return");
   },
   async bookingOptions(bookingToken, p) {
-    const body = await call({ ...baseParams(p), booking_token: bookingToken });
+    // The token already names the itinerary; the full "View more flights" list isn't needed here.
+    const { show_hidden: _, ...q } = baseParams(p);
+    const body = await call({ ...q, booking_token: bookingToken });
     if (!body.booking_options?.length) throw new ProviderError("expired", PROVIDER, "No booking options returned");
-    return body.booking_options.flatMap((o) =>
-      o.separate_tickets
-        ? [choice(o.departing, p.currency, "departing"), choice(o.returning, p.currency, "returning")].filter((x): x is BookingOption => Boolean(x))
-        : [choice(o.together, p.currency)].filter((x): x is BookingOption => Boolean(x)),
-    );
+    return body.booking_options
+      .map((o): BookingChoice | null => {
+        const tickets = o.separate_tickets ? [choice(o.departing, p.currency, "departing"), choice(o.returning, p.currency, "returning")] : [choice(o.together, p.currency)];
+        // Half of a separate-ticket deal can't be booked on its own.
+        if (tickets.some((t) => !t)) return null;
+        const prices = tickets.map((t) => t!.price);
+        const total = prices.every((x): x is number => typeof x === "number") ? prices.reduce((a, b) => a + b, 0) : undefined;
+        return { tickets: tickets as BookingOption[], total, currency: p.currency };
+      })
+      .filter((c): c is BookingChoice => Boolean(c))
+      .sort(rankChoices);
   },
 };

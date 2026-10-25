@@ -2,7 +2,7 @@
 import { Briefcase, Building2, Car, CheckCircle2, ExternalLink, Globe, MapPin, Navigation, Phone, RotateCcw, Settings2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DemoBadge, EmptyState, Skeleton, SmartImage } from "@/components/ui/primitives";
-import { airportByCode } from "@/lib/data/catalog";
+import { findAirport } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
 import type { Attachment, CarOffer, LocalBusiness, LocalBusinessResult } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
@@ -78,7 +78,7 @@ export function CarResults({ attachment, conversationId, onSaved }: { attachment
   const cats = useMemo(() => [...new Set(offers.map((c) => c.category))], [offers]);
   const list = offers.filter((c) => cat === "all" || c.category === cat);
   const p = attachment.params;
-  const d = airportByCode(p.destinationCode);
+  const d = findAirport(p.destinationCode);
 
   return (
     <section className="results" aria-label="Rental car results">
@@ -177,7 +177,7 @@ export function LocalBusinessCard({ b }: { b: LocalBusiness }) {
 export function BusinessDirectory({ attachment }: { attachment: BizAttachment }) {
   const res = useSearch<LocalBusinessResult>("businesses", { destinationCode: attachment.destinationCode, category: attachment.category });
   const dealer = attachment.category === "Car dealership";
-  const city = airportByCode(attachment.destinationCode)?.city ?? attachment.destinationCode;
+  const city = findAirport(attachment.destinationCode)?.city ?? attachment.destinationCode;
 
   return (
     <section className="results" aria-label={dealer ? "Car dealerships" : "Car rental agencies"}>

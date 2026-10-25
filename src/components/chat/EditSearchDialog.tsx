@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { AIRPORTS } from "@/lib/data/catalog";
+import { AirportInput } from "@/components/ui/AirportInput";
 import type { FlightSearchParams } from "@/lib/types";
 import { addDays, toISODate } from "@/lib/utils";
 
@@ -34,26 +34,18 @@ export function EditSearchDialog({ open, onClose, params, onApply }: { open: boo
       }
     >
       <div className="form-grid">
-        <label className="field">
-          <span className="field__label">From</span>
-          <select className="select" value={p.originCode} onChange={(e) => set({ originCode: e.target.value })}>
-            {AIRPORTS.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.city} ({a.code})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field__label">To</span>
-          <select className="select" value={p.destinationCode} onChange={(e) => set({ destinationCode: e.target.value })}>
-            {AIRPORTS.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.city} ({a.code})
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="field">
+          <label className="field__label" htmlFor="es-from">
+            From
+          </label>
+          <AirportInput id="es-from" value={p.originCode} onChange={(code) => set({ originCode: code })} />
+        </div>
+        <div className="field">
+          <label className="field__label" htmlFor="es-to">
+            To
+          </label>
+          <AirportInput id="es-to" value={p.destinationCode} onChange={(code) => set({ destinationCode: code })} />
+        </div>
         <label className="field">
           <span className="field__label">Depart</span>
           <input

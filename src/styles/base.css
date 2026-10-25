@@ -978,6 +978,45 @@ ul {
   color: var(--text-3);
 }
 
+/* ---------- Airport picker ---------- */
+
+.ap {
+  position: relative;
+}
+
+.ap__list {
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+}
+
+.ap__list .menu-item[data-active="true"] {
+  background: var(--surface-2);
+}
+
+.ap__city {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ap__city small {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.ap__code {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
 /* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {

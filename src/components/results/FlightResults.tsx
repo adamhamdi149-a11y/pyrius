@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { authHeaders } from "@/lib/authHeaders";
 import { Dialog } from "@/components/ui/Dialog";
 import { DemoBadge, EmptyState, Skeleton, useDismiss } from "@/components/ui/primitives";
-import { airportByCode } from "@/lib/data/catalog";
+import { findAirport } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
 import type { Attachment, FlightOffer, FlightSegment, FlightSnapshot } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
@@ -139,7 +139,7 @@ export function FlightCard({ offer, tags, conversationId, onSaved, locale, index
             {offer.travelers > 1 ? `${money(offer.pricePerTraveler, offer.currency, locale)} / traveler · ` : ""}
             {offer.inbound || offer.tripType === "round" ? "round trip" : "one way"}
           </div>
-          {offer.returnPending && <div className="t-meta fcard__pending">Return chosen at booking</div>}
+          {offer.returnPending && <div className="t-meta fcard__pending">With the cheapest return</div>}
         </div>
       </div>
       <div className="fcard__foot">
@@ -416,8 +416,8 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
   const set = (p: Partial<Filters>) => setF((x) => ({ ...x, ...p }));
   const p = attachment.params;
   const locale = settings.locale;
-  const o = airportByCode(p.originCode);
-  const d = airportByCode(p.destinationCode);
+  const o = findAirport(p.originCode);
+  const d = findAirport(p.destinationCode);
   const travelers = p.adults + p.children;
 
   const offers = useMemo(() => snap?.offers ?? [], [snap]);

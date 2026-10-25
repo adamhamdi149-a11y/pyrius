@@ -5,7 +5,7 @@ import { allow } from "@/lib/ai/concierge/rateLimit";
 import { cleanFlightParams } from "@/lib/apiGate";
 import type { FlightBrief } from "@/lib/flights/brief";
 import type { SavedSummary } from "@/lib/ai/concierge/tools";
-import { AIRPORTS } from "@/lib/data/catalog";
+import { isAirportCode } from "@/lib/data/world";
 import { PLANS } from "@/lib/plans";
 import { getUserFromRequest } from "@/lib/supabase/server";
 import type { AgentStage, CarSearchParams, ChipAction, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
@@ -29,14 +29,13 @@ interface Body {
   counts?: { saved?: number; trackers?: number };
 }
 
-const CODES = new Set(AIRPORTS.map((a) => a.code));
 const STAGES: AgentStage[] = ["collecting", "flights", "offer-hotels", "hotels", "offer-cars", "cars", "done"];
 const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const intIn = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined);
 const numIn = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : undefined);
 const oneOf = <T extends string>(v: unknown, list: readonly T[]) => (typeof v === "string" && (list as readonly string[]).includes(v) ? (v as T) : undefined);
 const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
-const code = (v: unknown) => (typeof v === "string" && CODES.has(v) ? v : undefined);
+const code = (v: unknown) => (isAirportCode(v) ? v : undefined);
 
 /** The trip comes from the browser, so every field is checked before it reaches the model or a search. */
 function cleanTrip(p: unknown): TripPreferences {

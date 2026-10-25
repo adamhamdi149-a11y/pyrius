@@ -1265,6 +1265,7 @@
 /* Booking dialog */
 .bk {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -1327,8 +1328,9 @@
 
 .bk__main b {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-weight: 620;
 }
 
@@ -1353,6 +1355,127 @@
   font-size: var(--fs-xs);
   color: var(--text-3);
   line-height: 1.55;
+}
+
+.bk__note--warn {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--warning-soft, var(--accent-soft));
+  color: var(--text-2);
+}
+
+.bk__status {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.bk__trip {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+}
+
+.bk__leg {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+}
+
+.bk__leg + .bk__leg {
+  border-top: 1px solid var(--border);
+}
+
+.bk__leg-k {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.bk__leg b {
+  font-weight: 620;
+}
+
+.bk__leg b sup {
+  margin-left: 1px;
+  font-size: 10px;
+  color: var(--accent-hi);
+}
+
+.bk__leg > span:last-of-type {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.bk__change {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent-hi);
+}
+
+.bk__change:hover {
+  background: var(--accent-soft);
+}
+
+.bk__best {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.bk__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.bk__label svg {
+  width: 14px;
+  height: 14px;
+  color: var(--success, var(--accent));
+}
+
+.bk__best .bk__opt:has(.btn--primary) {
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.bk__more summary {
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 4px 0;
+}
+
+.bk__more .bk__list {
+  margin-top: 8px;
+}
+
+.bk__group {
+  display: grid;
+  gap: 4px;
+}
+
+.bk__tick {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-hi);
+}
+
+.bk__row[aria-current="true"] {
+  border-color: var(--accent-line);
 }
 
 @media (max-width: 560px) {

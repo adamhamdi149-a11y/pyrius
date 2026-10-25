@@ -1,4 +1,4 @@
-import { cityName } from "@/lib/data/catalog";
+import { placeName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
 import { flightMode, getProviders } from "@/lib/providers";
 import type { AgentReply, AgentStage, Attachment, CarSearchParams, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
@@ -135,10 +135,10 @@ async function shownResults(r: ConciergeRequest["results"]) {
   if (r.flights?.shown.length) {
     const live = r.flights.source === "live";
     out.push(
-      `Flight cards currently shown (${cityName(r.flights.params.originCode)} → ${cityName(r.flights.params.destinationCode)}, ${live ? `live offers retrieved ${r.flights.fetchedAt ?? "earlier"}` : "demo examples"}, sorted by ${r.flights.sort ?? "price"}): ` +
+      `Flight cards currently shown (${placeName(r.flights.params.originCode)} → ${placeName(r.flights.params.destinationCode)}, ${live ? `live offers retrieved ${r.flights.fetchedAt ?? "earlier"}` : "demo examples"}, sorted by ${r.flights.sort ?? "price"}): ` +
         r.flights.shown
           .slice(0, 10)
-          .map((f) => `#${f.n} id=${f.id} ${f.airline}: ${f.out}${f.back ? ` / back ${f.back}` : ""}, ${f.price} ${f.currency}${f.return_chosen_at_booking ? " (round trip, return chosen when booking)" : ""}${f.bags ? `, ${f.bags}` : ""}${f.conditions.length ? ` [${f.conditions.join("; ")}]` : ""}`)
+          .map((f) => `#${f.n} id=${f.id} ${f.airline}: ${f.out}${f.back ? ` / back ${f.back}` : ""}, ${f.price} ${f.currency}${f.return_chosen_at_booking ? " (round trip with the cheapest return, added when booking)" : ""}${f.bags ? `, ${f.bags}` : ""}${f.conditions.length ? ` [${f.conditions.join("; ")}]` : ""}`)
           .join("; "),
     );
   } else if (r.flights) {
@@ -242,7 +242,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     attachments: attachments.length ? attachments : undefined,
     actions: offTopic || !state.actions.length ? undefined : state.actions,
     sources: offTopic || !final.sources.length ? undefined : final.sources,
-    title: t.originCode && t.destinationCode ? `${cityName(t.originCode, req.locale)} → ${cityName(t.destinationCode, req.locale)}` : undefined,
+    title: t.originCode && t.destinationCode ? `${placeName(t.originCode, req.locale)} → ${placeName(t.destinationCode, req.locale)}` : undefined,
     engine: "openai",
   };
 }

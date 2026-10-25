@@ -3,7 +3,7 @@ import { Bell, BellRing, Bookmark, BookmarkCheck, ExternalLink } from "lucide-re
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { TrackDialog } from "@/components/tracking/TrackDialog";
-import { BookingDialog } from "./BookingDialog";
+import { BookingDialog, openBookingTab } from "./BookingDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
 import type { AnyOffer } from "@/lib/types";
@@ -37,6 +37,7 @@ export function OfferActions({
   const router = useRouter();
   const [trackOpen, setTrackOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
+  const [bookTab, setBookTab] = useState<Window | null>(null);
   const saved = store.isSaved(offer.offer.id);
   const tracker = store.trackerFor(offer.offer.id);
   const loc = store.settings.locale;
@@ -78,7 +79,14 @@ export function OfferActions({
         <span>{tracker ? store.t("common.tracking") : store.t("common.track")}</span>
       </button>
       {bookable ? (
-        <button className="btn btn--primary btn--sm offer-actions__out" onClick={() => setBookOpen(true)} title="See who sells this itinerary and continue to their booking page">
+        <button
+          className="btn btn--primary btn--sm offer-actions__out"
+          onClick={() => {
+            setBookTab(openBookingTab(bookable));
+            setBookOpen(true);
+          }}
+          title="Continue to the seller with the lowest price for this trip"
+        >
           Book
           <ExternalLink />
         </button>
@@ -94,7 +102,7 @@ export function OfferActions({
           <ExternalLink />
         </a>
       )}
-      {bookable && <BookingDialog offer={bookable} open={bookOpen} onClose={() => setBookOpen(false)} onExpired={onExpired} />}
+      {bookable && <BookingDialog offer={bookable} open={bookOpen} tab={bookTab} onClose={() => setBookOpen(false)} onExpired={onExpired} />}
 
       <TrackDialog
         open={trackOpen}

@@ -1,4 +1,4 @@
-import { AIRPORTS, airportByCode, cityName } from "@/lib/data/catalog";
+import { airportLabel, findAirport, isAirportCode, nearbyAirports, placeName as cityName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
 import { planById } from "@/lib/plans";
 import { getProviders } from "@/lib/providers";
@@ -56,7 +56,6 @@ export interface TurnState {
   toolCalls: number;
 }
 
-const CODES = AIRPORTS.map((a) => a.code);
 const nullable = (schema: Record<string, unknown>) => ({ ...schema, type: [schema.type as string, "null"] });
 const nEnum = (values: string[]) => ({ type: ["string", "null"], enum: [...values, null] });
 
@@ -71,8 +70,8 @@ export const TOOLS = [
       type: "object",
       additionalProperties: false,
       properties: {
-        origin_code: { ...nEnum(CODES), description: "Departure airport code from the supported list." },
-        destination_code: { ...nEnum(CODES), description: "Destination airport code from the supported list." },
+        origin_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the departure airport; any airport worldwide (YUL, TUN, NBO…)." },
+        destination_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the destination airport; any airport worldwide (FCO, DJE, DSS…)." },
         depart_date: nullable({ type: "string", description: "Departure date, YYYY-MM-DD." }),
         return_date: nullable({ type: "string", description: "Return date, YYYY-MM-DD." }),
         trip_length_days: nullable({ type: "integer", description: "Trip length in days when the user gave a length instead of a return date." }),
@@ -231,8 +230,8 @@ export function missingForFlights(t: TripPreferences): string[] {
 
 export function describeTrip(t: TripPreferences) {
   return {
-    origin: t.originCode ? `${cityName(t.originCode)} (${t.originCode})` : null,
-    destination: t.destinationCode ? `${cityName(t.destinationCode)} (${t.destinationCode})` : null,
+    origin: t.originCode ? airportLabel(t.originCode) : null,
+    destination: t.destinationCode ? airportLabel(t.destinationCode) : null,
     trip_type: t.tripType === "oneway" ? "one-way" : t.returnDate ? "round trip" : null,
     depart_date: t.departDate ?? null,
     return_date: t.returnDate ?? null,
@@ -285,10 +284,19 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
     changed.push(`cleared ${c}`);
   }
 
-  if (typeof a.origin_code === "string" && CODES.includes(a.origin_code)) set("originCode", a.origin_code);
-  if (typeof a.destination_code === "string" && CODES.includes(a.destination_code)) {
-    if (a.destination_code === t.originCode) issues.push("The destination is the same as the departure city. Ask which one the user meant.");
-    else set("destinationCode", a.destination_code);
+  const airport = (v: unknown, what: string) => {
+    if (v == null) return undefined;
+    const c = String(v).trim().toUpperCase();
+    if (isAirportCode(c)) return c;
+    issues.push(`"${v}" isn't an airport with scheduled flights. Use the IATA code of the airport that serves the ${what}.`);
+    return undefined;
+  };
+  const origin = airport(a.origin_code, "departure city");
+  const destination = airport(a.destination_code, "destination");
+  if (origin) set("originCode", origin);
+  if (destination) {
+    if (destination === t.originCode) issues.push("The destination is the same as the departure city. Ask which one the user meant.");
+    else set("destinationCode", destination);
   }
 
   if (a.trip_type === "one_way") {
@@ -430,7 +438,7 @@ const shownFlight = (s: TurnState, id: string) => s.flights?.shown.find((f) => f
 
 // The cards show the exact retrieval time in the user's own timezone, so the AI just says "just now".
 const LIVE_NOTE = (at: string) =>
-  `Live offers from Google Flights, retrieved just now (${at}); don't state a clock time, the cards show it. Prices and seats can change until the user books with the seller. Pyrius doesn't sell tickets; each card's Book button shows who sells that itinerary and continues to their site.`;
+  `Live offers from Google Flights, retrieved just now (${at}); don't state a clock time, the cards show it. Prices and seats can change until the user books with the seller. Pyrius doesn't sell tickets; each card's Book button picks the seller with the lowest price for that trip and opens their booking page.`;
 const DEMO_NOTE = "These are Pyrius demo flights (generated examples), not real offers. Say so clearly; never call them real or live.";
 
 function searchFailure(err: unknown) {
@@ -482,11 +490,15 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       }
       const offers = snap.offers;
       if (!offers.length) {
+        const near = (c: string) => nearbyAirports(c).map((a) => `${a.city} ${a.code} (${a.km} km)`);
         return {
           ok: true,
           flights_found: 0,
           data_source: snap.source,
-          guidance: "No flights were returned for this route and these dates. Say so, and suggest other dates, a nearby airport, or allowing stops. Don't invent alternatives.",
+          guidance:
+            "Google Flights returned no itineraries for this route and these dates; smaller airports are often only reachable with a separate connection. Say so, and offer to search to one of the nearby destination airports listed (name two or three), or other dates. Mention a nearby departure airport only if the user asks for more options. Don't invent alternatives.",
+          nearby_destination_airports: near(params.destinationCode),
+          nearby_origin_airports: near(params.originCode),
         };
       }
       const nonstopCount = offers.filter(isNonstop).length;
@@ -514,7 +526,7 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
         travelers: `${params.adults} adult(s)${params.children ? `, ${params.children} child(ren)` : ""}`,
         pricing: round
           ? snap.source === "live" && offers.some((o) => o.returnPending)
-            ? "Prices are round-trip totals for all travelers. Each card is an outbound flight; the user picks the return flight in the booking step."
+            ? "Prices are round-trip totals for all travelers, with the cheapest return flight for each outbound flight. Book adds that return and opens the cheapest seller's page."
             : "Prices are round-trip totals for all travelers."
           : "Prices are one-way totals for all travelers.",
         shown_after_filters: view.length,
@@ -649,7 +661,7 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       s.attachments.push({ type: "businesses", destinationCode: s.trip.destinationCode, category });
       return {
         ok: true,
-        shown_to_user: `A map search for ${category.toLowerCase()} near ${airportByCode(s.trip.destinationCode)?.city} is shown under your reply.`,
+        shown_to_user: `A map search for ${category.toLowerCase()} near ${findAirport(s.trip.destinationCode)?.city ?? s.trip.destinationCode} is shown under your reply.`,
         note: "Pyrius has no verified business directory. Do not name businesses, phone numbers or addresses. Dealerships sell cars; they usually don't rent them.",
       };
     }

@@ -1,7 +1,41 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "pyrius", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
-    { "name": "sheet", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8777", "--directory", "C:/Users/user/AppData/Local/Temp/claude/C--Users-user-FlightIQ/b1aa7f06-92b2-47df-9045-636be69fbb02/scratchpad"], "port": 8777 }
+    {
+      "name": "pyrius",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "pyrius-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "-p",
+        "3001"
+      ],
+      "port": 3001,
+      "env": {
+        "NEXT_PUBLIC_SUPABASE_URL": "",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY": ""
+      }
+    },
+    {
+      "name": "sheet",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8777",
+        "--directory",
+        "C:/Users/user/AppData/Local/Temp/claude/C--Users-user-FlightIQ/b1aa7f06-92b2-47df-9045-636be69fbb02/scratchpad"
+      ],
+      "port": 8777
+    }
   ]
 }

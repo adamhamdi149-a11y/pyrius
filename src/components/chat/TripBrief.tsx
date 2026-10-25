@@ -1,7 +1,7 @@
 "use client";
 import { Car, Check, Hotel, ListChecks, Plane } from "lucide-react";
 import type { ReactNode } from "react";
-import { cityName } from "@/lib/data/catalog";
+import { placeName } from "@/lib/data/world";
 import type { Conversation, OfferKind } from "@/lib/types";
 import { cx, formatRange, money } from "@/lib/utils";
 
@@ -31,8 +31,8 @@ export function TripBrief({ conv, saved, locale, pending, aside }: { conv: Conve
   ];
   const travelers = (p.adults ?? 0) + (p.children ?? 0);
   const facts: { k: string; v: string }[] = [];
-  if (p.originCode) facts.push({ k: "from", v: cityName(p.originCode, locale) });
-  if (p.destinationCode) facts.push({ k: "to", v: `→ ${cityName(p.destinationCode, locale)}` });
+  if (p.originCode) facts.push({ k: "from", v: placeName(p.originCode, locale) });
+  if (p.destinationCode) facts.push({ k: "to", v: `→ ${placeName(p.destinationCode, locale)}` });
   else if (p.wantsWarm) facts.push({ k: "to", v: L("→ somewhere warm", "→ au chaud") });
   if (p.departDate) facts.push({ k: "dates", v: formatRange(p.departDate, p.returnDate, locale) + (p.flexibleDates ? " ±" : "") });
   if (travelers) facts.push({ k: "pax", v: L(`${travelers} traveler${travelers > 1 ? "s" : ""}`, `${travelers} voyageur${travelers > 1 ? "s" : ""}`) });

@@ -7,7 +7,7 @@ import { OrbThemePicker } from "@/components/settings/OrbThemePicker";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { initials, Switch } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
-import { AIRPORTS } from "@/lib/data/catalog";
+import { AirportInput } from "@/components/ui/AirportInput";
 import { BillingSwitch } from "@/components/marketing/sections";
 import { limitText, planById, planPrice, PLANS, usd, YEARLY_SAVING } from "@/lib/plans";
 import { useStore } from "@/lib/store/AppStore";
@@ -147,13 +147,7 @@ function Preferences() {
     <Section title="Preferences" desc="Defaults the assistant uses so it can ask fewer questions.">
       <div className="sgroup">
         <Row label="Home airport" hint="Suggested first when the assistant asks where you're leaving from.">
-          <select className="select" value={settings.homeAirport} onChange={(e) => set({ homeAirport: e.target.value })}>
-            {AIRPORTS.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.city} ({a.code})
-              </option>
-            ))}
-          </select>
+          <AirportInput value={settings.homeAirport} onChange={(code) => set({ homeAirport: code })} />
         </Row>
         <Row label="Currency" hint="Applies to new searches. Demo conversions use fixed approximate rates.">
           <select className="select" value={settings.currency} onChange={(e) => set({ currency: e.target.value as UserSettings["currency"] })}>

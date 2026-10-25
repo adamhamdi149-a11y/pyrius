@@ -3,7 +3,7 @@ import { BedDouble, Coffee, MapPin, RotateCcw, ShieldCheck, SlidersHorizontal, S
 import { useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState, Skeleton, SmartImage } from "@/components/ui/primitives";
-import { airportByCode } from "@/lib/data/catalog";
+import { findAirport } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
 import type { Attachment, HotelOffer } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
@@ -176,7 +176,7 @@ export function HotelResults({ attachment, conversationId, onSaved }: { attachme
     </>
   );
 
-  const d = airportByCode(p.destinationCode);
+  const d = findAirport(p.destinationCode);
   return (
     <section className="results" aria-label="Accommodation results">
       <SearchSummary

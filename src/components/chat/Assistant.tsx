@@ -12,7 +12,7 @@ import { flightBrief } from "@/lib/flights/brief";
 import { authHeaders } from "@/lib/authHeaders";
 import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
-import { airportByCode } from "@/lib/data/catalog";
+import { findAirport } from "@/lib/data/world";
 import type { MessageKey } from "@/lib/i18n";
 import { newConversation, useStore } from "@/lib/store/AppStore";
 import { messageAttachments, type AgentReply, type AnyOffer, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type OfferKind, type TripPreferences } from "@/lib/types";
@@ -373,7 +373,7 @@ export function Assistant() {
     const c = convRef.current;
     setEditing(null);
     if (!c) return;
-    const route = `${airportByCode(p.originCode)?.city} → ${airportByCode(p.destinationCode)?.city}`;
+    const route = `${findAirport(p.originCode)?.city} → ${findAirport(p.destinationCode)?.city}`;
     appendAssistant(
       c,
       {

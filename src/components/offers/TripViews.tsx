@@ -2,7 +2,7 @@
 import { Car, Check, ChevronRight, Hotel, MessageSquare, Plane, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SmartImage } from "@/components/ui/primitives";
-import { airportByCode, cityName } from "@/lib/data/catalog";
+import { findAirport, placeName } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
 import type { Conversation, SavedOffer } from "@/lib/types";
 import { cx, formatRange, parseDate, timeAgo, toISODate } from "@/lib/utils";
@@ -27,10 +27,10 @@ export function summarizeTrips(conversations: Conversation[], saved: SavedOffer[
       const mine = saved.filter((s) => s.conversationId === c.id);
       return {
         conv: c,
-        title: p.originCode && p.destinationCode ? `${cityName(p.originCode, locale)} → ${cityName(p.destinationCode, locale)}` : c.title,
-        dest: p.destinationCode ? cityName(p.destinationCode, locale) : undefined,
+        title: p.originCode && p.destinationCode ? `${placeName(p.originCode, locale)} → ${placeName(p.destinationCode, locale)}` : c.title,
+        dest: p.destinationCode ? placeName(p.destinationCode, locale) : undefined,
         dates: p.departDate ? formatRange(p.departDate, p.returnDate, locale) : undefined,
-        image: airportByCode(p.destinationCode)?.image,
+        image: findAirport(p.destinationCode)?.image,
         travelers: (p.adults ?? 0) + (p.children ?? 0),
         upcoming: Boolean(p.departDate && p.departDate >= today && p.destinationCode),
         has: { flight: mine.some((s) => s.kind === "flight"), hotel: mine.some((s) => s.kind === "hotel"), car: mine.some((s) => s.kind === "car") },
@@ -93,7 +93,7 @@ export function TripSpotlight({ trip, saved, trackedCount }: { trip: TripSummary
         </div>
         <h2 className="spot__title">{trip.dest ?? trip.title}</h2>
         <p className="spot__sub">
-          {p.originCode ? `From ${cityName(p.originCode, settings.locale)} · ` : ""}
+          {p.originCode ? `From ${placeName(p.originCode, settings.locale)} · ` : ""}
           {trip.dates ?? "Dates not set"}
           {trip.travelers > 0 && ` · ${trip.travelers} traveler${trip.travelers > 1 ? "s" : ""}`}
         </p>

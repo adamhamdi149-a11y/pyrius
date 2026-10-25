@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { allow } from "@/lib/ai/concierge/rateLimit";
-import { AIRPORTS } from "@/lib/data/catalog";
+import { isAirportCode } from "@/lib/data/world";
 import { getUserFromRequest } from "@/lib/supabase/server";
 import type { FlightSearchParams } from "@/lib/types";
 
@@ -22,14 +22,13 @@ export async function gate(req: Request, bucket: string): Promise<{ who: string 
   return { who };
 }
 
-const CODES = new Set(AIRPORTS.map((a) => a.code));
 const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const intIn = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined);
 
 /** Flight search parameters from the browser, checked field by field. */
 export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
   const p = (v && typeof v === "object" ? v : {}) as Partial<FlightSearchParams>;
-  if (typeof p.originCode !== "string" || !CODES.has(p.originCode) || typeof p.destinationCode !== "string" || !CODES.has(p.destinationCode)) return undefined;
+  if (!isAirportCode(p.originCode) || !isAirportCode(p.destinationCode)) return undefined;
   if (p.originCode === p.destinationCode || !isDate(p.departDate)) return undefined;
   const returnDate = isDate(p.returnDate) && p.returnDate > p.departDate ? p.returnDate : undefined;
   return {

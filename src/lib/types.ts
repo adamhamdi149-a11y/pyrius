@@ -21,7 +21,7 @@ export interface Airport {
   tz: number;
   warm?: boolean;
   image?: string;
-  region: "na" | "eu" | "asia" | "carib" | "latam" | "oceania" | "me";
+  region: "na" | "eu" | "asia" | "carib" | "latam" | "oceania" | "me" | "africa";
 }
 
 export interface TripPreferences {

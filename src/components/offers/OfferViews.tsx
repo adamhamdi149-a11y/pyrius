@@ -2,7 +2,7 @@
 import { ArrowDownRight, ArrowUpRight, Bell, BellOff, BellRing, Car, ExternalLink, Hotel, Maximize2, Minus, Pause, Plane, Play, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { CarCard } from "@/components/results/CarResults";
-import { BookingDialog } from "@/components/results/BookingDialog";
+import { BookingDialog, openBookingTab } from "@/components/results/BookingDialog";
 import { FlightCard } from "@/components/results/FlightResults";
 import { HotelCard } from "@/components/results/HotelResults";
 import { PriceChart } from "@/components/tracking/PriceChart";
@@ -11,7 +11,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DemoBadge, SmartImage } from "@/components/ui/primitives";
 import { Price } from "@/components/ui/Price";
 import { useToast } from "@/components/ui/Toast";
-import { cityName } from "@/lib/data/catalog";
+import { placeName } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
 import type { AnyOffer, PriceTracker, SavedOffer } from "@/lib/types";
 import { cx, formatRange, money, timeAgo } from "@/lib/utils";
@@ -20,7 +20,7 @@ export function describeOffer(o: AnyOffer, locale: "en" | "fr" = "en") {
   if (o.kind === "flight") {
     const f = o.offer;
     return {
-      title: `${cityName(f.outbound.from, locale)} → ${cityName(f.outbound.to, locale)}`,
+      title: `${placeName(f.outbound.from, locale)} → ${placeName(f.outbound.to, locale)}`,
       sub: `${f.airline.name} · ${formatRange(f.outbound.depart.slice(0, 10), f.inbound?.depart.slice(0, 10), locale)} · ${f.outbound.stops ? `${f.outbound.stops} stop` : "Nonstop"}`,
       start: f.outbound.depart.slice(0, 10),
     };
@@ -91,6 +91,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
   const toast = useToast();
   const [track, setTrack] = useState(false);
   const [book, setBook] = useState(false);
+  const [bookTab, setBookTab] = useState<Window | null>(null);
   const loc = store.settings.locale;
   const o = item.data;
   const bookable = o.kind === "flight" && o.offer.source === "live" && o.offer.booking ? o.offer : null;
@@ -139,7 +140,15 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
           {tracker ? <BellRing /> : <Bell />}
         </button>
         {bookable ? (
-          <button className="icon-btn" onClick={() => setBook(true)} aria-label="Book this flight" title="Book: see who sells it">
+          <button
+            className="icon-btn"
+            onClick={() => {
+              setBookTab(openBookingTab(bookable));
+              setBook(true);
+            }}
+            aria-label="Book this flight"
+            title="Book with the seller that has the lowest price"
+          >
             <ExternalLink />
           </button>
         ) : (
@@ -154,7 +163,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
             <ExternalLink />
           </a>
         )}
-        {bookable && <BookingDialog offer={bookable} open={book} onClose={() => setBook(false)} />}
+        {bookable && <BookingDialog offer={bookable} open={book} tab={bookTab} onClose={() => setBook(false)} />}
         <button className="icon-btn" onClick={remove} aria-label={`Remove ${d.title}`} title="Remove">
           <Trash2 />
         </button>
