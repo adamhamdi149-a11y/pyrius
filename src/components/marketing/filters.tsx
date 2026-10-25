@@ -1,8 +1,54 @@
 "use client";
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, MapPin, Minus, Plane, Plus, Search, Users } from "lucide-react";
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { AIRPORTS } from "@/lib/data/catalog";
-import type { Airport } from "@/lib/types";
+
+/**
+ * The world's busiest airports, for the website's search pieces. The first five (shown before you
+ * type) span five regions; the rest are matched by city, code or country as you type.
+ */
+interface Place {
+  code: string;
+  city: string;
+  country: string;
+}
+const WORLD_AIRPORTS: Place[] = [
+  { code: "DXB", city: "Dubai", country: "United Arab Emirates" },
+  { code: "LHR", city: "London Heathrow", country: "United Kingdom" },
+  { code: "ATL", city: "Atlanta", country: "United States" },
+  { code: "HND", city: "Tokyo Haneda", country: "Japan" },
+  { code: "SIN", city: "Singapore", country: "Singapore" },
+  { code: "CDG", city: "Paris", country: "France" },
+  { code: "JFK", city: "New York", country: "United States" },
+  { code: "IST", city: "Istanbul", country: "Türkiye" },
+  { code: "DEL", city: "Delhi", country: "India" },
+  { code: "LAX", city: "Los Angeles", country: "United States" },
+  { code: "ICN", city: "Seoul Incheon", country: "South Korea" },
+  { code: "AMS", city: "Amsterdam", country: "Netherlands" },
+  { code: "FRA", city: "Frankfurt", country: "Germany" },
+  { code: "DFW", city: "Dallas/Fort Worth", country: "United States" },
+  { code: "MAD", city: "Madrid", country: "Spain" },
+  { code: "CAN", city: "Guangzhou", country: "China" },
+  { code: "PVG", city: "Shanghai Pudong", country: "China" },
+  { code: "PEK", city: "Beijing", country: "China" },
+  { code: "HKG", city: "Hong Kong", country: "Hong Kong" },
+  { code: "BKK", city: "Bangkok", country: "Thailand" },
+  { code: "DOH", city: "Doha", country: "Qatar" },
+  { code: "ORD", city: "Chicago O'Hare", country: "United States" },
+  { code: "DEN", city: "Denver", country: "United States" },
+  { code: "BOM", city: "Mumbai", country: "India" },
+  { code: "MEX", city: "Mexico City", country: "Mexico" },
+  { code: "GRU", city: "São Paulo", country: "Brazil" },
+  { code: "SYD", city: "Sydney", country: "Australia" },
+  { code: "KUL", city: "Kuala Lumpur", country: "Malaysia" },
+  { code: "BCN", city: "Barcelona", country: "Spain" },
+  { code: "FCO", city: "Rome", country: "Italy" },
+  { code: "MUC", city: "Munich", country: "Germany" },
+  { code: "LAS", city: "Las Vegas", country: "United States" },
+  { code: "MIA", city: "Miami", country: "United States" },
+  { code: "YYZ", city: "Toronto", country: "Canada" },
+  { code: "JNB", city: "Johannesburg", country: "South Africa" },
+  { code: "CAI", city: "Cairo", country: "Egypt" },
+];
 import { addDays, cx, parseDate, toISODate } from "@/lib/utils";
 import type { FragKey } from "./scripts";
 
@@ -13,8 +59,8 @@ type Stops = "0" | "1" | "2" | null;
 type Sort = "recommended" | "cheapest" | "fastest";
 
 interface Filters {
-  to: Airport | null;
-  from: Airport | null;
+  to: Place | null;
+  from: Place | null;
   start: string | null;
   end: string | null;
   /** Trip length chosen before any dates. */
@@ -101,11 +147,12 @@ function AirportField({ label, icon, placeholder, field }: { label: string; icon
 
   const matches = useMemo(() => {
     const q = text.trim().toLowerCase();
-    const pool = q ? AIRPORTS.filter((a) => a.city.toLowerCase().startsWith(q) || a.code.toLowerCase().startsWith(q) || a.country.toLowerCase().startsWith(q)) : AIRPORTS;
+    const words = (s: string) => s.toLowerCase().split(/[\s/]+/);
+    const pool = q ? WORLD_AIRPORTS.filter((a) => a.code.toLowerCase().startsWith(q) || [...words(a.city), ...words(a.country)].some((w) => w.startsWith(q)) || a.city.toLowerCase().startsWith(q)) : WORLD_AIRPORTS;
     return pool.slice(0, 5);
   }, [text]);
 
-  const choose = (a: Airport) => {
+  const choose = (a: Place) => {
     set({ [field]: a } as Partial<Filters>);
     setText(`${a.city} (${a.code})`);
     setOpen(false);

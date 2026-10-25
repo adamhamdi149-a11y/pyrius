@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export const LEGAL_EFFECTIVE = "October 23, 2026";
+export const LEGAL_EFFECTIVE = "October 25, 2026";
 export const PRIVACY_EMAIL = "contact@pyrius.app";
 
 export interface LegalSection {

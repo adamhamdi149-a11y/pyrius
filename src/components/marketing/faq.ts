@@ -23,12 +23,12 @@ export const FAQS: FaqItem[] = [
   },
   {
     q: "How much does it cost?",
-    a: "Pyrius is free to start. Plus and Pro add more tracked prices, more saved offers and alerts. See Pricing for what each plan includes.",
+    a: "Pyrius is free to start. Plus ($9.99 a month, or $4.99 a month billed yearly) and Pro ($19.99 a month, or $11.99 a month billed yearly) add more AI-assisted flight searches, saved offers, tracked prices and alerts. Prices are in US dollars. See Pricing for what each plan includes.",
     link: { text: "Pricing", href: "#pricing" },
   },
   {
     q: "Can I cancel a paid plan?",
-    a: "Yes, at any time. Your paid features continue until the end of the month you've already paid for.",
+    a: "Yes, at any time, from Settings. Your paid features continue until the end of the month or year you've already paid for.",
   },
   {
     q: "Do I need an account?",

@@ -359,19 +359,25 @@ export interface UserSettings {
   notifications: { email: boolean; priceAlerts: boolean; savedSearches: boolean; productNews: boolean };
 }
 
+export type BillingInterval = "month" | "year";
+
 export interface PlanDefinition {
   id: PlanId;
   name: string;
-  monthlyCAD: number;
+  /** USD per month when billed monthly. */
+  monthlyUSD: number;
+  /** USD per month when billed yearly (charged as 12 × this, once a year). */
+  yearlyMonthlyUSD: number;
   tagline: string;
-  limits: { trackers: number; saved: number };
+  /** Infinity means unlimited. */
+  limits: { searches: number; trackers: number; saved: number };
   features: string[];
-  provisional: true;
 }
 
 export interface Subscription {
   plan: PlanId;
-  status: "active" | "demo-preview";
+  /** "canceling": paid until the period ends; "past_due": a renewal failed and Stripe is retrying. */
+  status: "active" | "demo-preview" | "canceling" | "past_due";
   /** Where the entitlement came from. Only "stripe" is a real paid subscription. */
   source: "default" | "demo" | "stripe";
 }

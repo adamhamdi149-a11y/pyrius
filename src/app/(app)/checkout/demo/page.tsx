@@ -4,9 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useToast } from "@/components/ui/Toast";
-import { planById } from "@/lib/plans";
+import { planById, planPrice, usd } from "@/lib/plans";
 import { useStore } from "@/lib/store/AppStore";
-import { moneyExact } from "@/lib/utils";
 
 function DemoCheckout() {
   const params = useSearchParams();
@@ -14,6 +13,8 @@ function DemoCheckout() {
   const store = useStore();
   const toast = useToast();
   const plan = planById(params.get("plan") === "pro" ? "pro" : "plus");
+  const interval = params.get("interval") === "year" ? "year" : "month";
+  const price = planPrice(plan, interval);
   const local = store.storage === "local";
 
   return (
@@ -31,12 +32,12 @@ function DemoCheckout() {
         </div>
         <div>
           <div className="checkout__line">
-            <span>{plan.name} plan · monthly</span>
-            <span className="num">{moneyExact(plan.monthlyCAD, "CAD")}</span>
+            <span>{plan.name} plan · {interval === "year" ? "yearly" : "monthly"}</span>
+            <span className="num">{usd(price.charged)} USD</span>
           </div>
           <div className="checkout__line" style={{ color: "var(--text-3)" }}>
-            <span>Provisional price (CAD)</span>
-            <span>Not final</span>
+            <span>{interval === "year" ? `${usd(price.perMonth)} / month, billed yearly` : "Billed monthly"}</span>
+            <span>Demo</span>
           </div>
         </div>
         {local ? (

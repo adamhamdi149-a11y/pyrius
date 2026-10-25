@@ -95,7 +95,9 @@ export class SupabaseRepository implements Repository {
       conversations: (convs.data ?? []).map((r) => r.data),
       saved: (saved.data ?? []).map((r) => r.data),
       trackers: (trackers.data ?? []).map((r) => r.data),
-      subscription: sub.data ? { plan: sub.data.plan as PlanId, status: "active", source: "stripe" } : undefined,
+      subscription: sub.data
+        ? { plan: sub.data.plan as PlanId, status: sub.data.status === "canceling" || sub.data.status === "past_due" ? sub.data.status : "active", source: "stripe" }
+        : undefined,
     };
   }
 

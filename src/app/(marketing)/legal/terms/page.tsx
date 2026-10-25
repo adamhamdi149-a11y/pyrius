@@ -75,8 +75,9 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Pyrius offers a free plan and optional paid plans. Paid plans are billed monthly in advance through Stripe, in Canadian dollars, plus applicable taxes, and
-          renew automatically each month until you cancel. Prices and what each plan includes are shown before you subscribe.
+          Pyrius offers a free plan and optional paid plans. Paid plans are billed in advance through Stripe, in US dollars, plus applicable taxes, either monthly or
+          once a year, and renew automatically at the end of each billing period until you cancel. Prices, the billing period and what each plan includes are shown
+          before you subscribe. If your card is in another currency, your bank may convert the amount and charge its own fees.
         </p>
         <p>
           You can cancel at any time; your paid features continue until the end of the period you have paid for. We will tell you at least 30 days in advance of any

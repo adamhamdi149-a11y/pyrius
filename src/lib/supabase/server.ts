@@ -45,3 +45,14 @@ export async function downgradeBySubscriptionId(subscriptionId: string) {
   });
   if (!res.ok) throw new Error(`Supabase update failed: ${res.status}`);
 }
+
+/** The user's billing row (server only, via the service role). */
+export async function getSubscriptionRow(userId: string): Promise<{ plan: PlanId; status: string; stripe_customer_id: string | null; stripe_subscription_id: string | null } | null> {
+  if (!URL || !SERVICE) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required to read subscriptions");
+  const res = await fetch(`${URL}/rest/v1/subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=plan,status,stripe_customer_id,stripe_subscription_id`, {
+    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+  });
+  if (!res.ok) throw new Error(`Supabase read failed: ${res.status}`);
+  const rows = await res.json();
+  return rows[0] ?? null;
+}

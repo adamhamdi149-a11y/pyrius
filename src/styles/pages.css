@@ -1076,6 +1076,7 @@ a.metric:hover {
 
 .plan__features {
   display: grid;
+  align-content: start;
   gap: 9px;
   font-size: var(--fs-sm);
   flex: 1;

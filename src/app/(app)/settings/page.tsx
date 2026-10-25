@@ -8,11 +8,12 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 import { initials, Switch } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
 import { AIRPORTS } from "@/lib/data/catalog";
-import { PLANS, planById } from "@/lib/plans";
+import { BillingSwitch } from "@/components/marketing/sections";
+import { limitText, planById, planPrice, PLANS, usd, YEARLY_SAVING } from "@/lib/plans";
 import { useStore } from "@/lib/store/AppStore";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
-import type { PlanId, UserSettings } from "@/lib/types";
-import { cx, moneyExact } from "@/lib/utils";
+import type { BillingInterval, PlanId, UserSettings } from "@/lib/types";
+import { cx } from "@/lib/utils";
 
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
@@ -276,12 +277,15 @@ function Notifications() {
 }
 
 const MATRIX: [string, string | boolean, string | boolean, string | boolean][] = [
-  ["AI trip planning", true, true, true],
-  ["Saved offers", "25", "250", "1,000"],
-  ["Tracked prices", "3", "25", "100"],
-  ["Price-alert emails", false, true, true],
+  ["AI-assisted flight searches / month", "3", "30", "Unlimited"],
+  ["Saved flight offers", "1", "Unlimited", "Unlimited"],
+  ["Tracked flight prices", "1", "10", "Unlimited"],
+  ["Live flight results", true, true, true],
+  ["Email price alerts", false, true, true],
   ["Saved-search alerts", false, true, true],
-  ["Multi-trip planning", false, false, true],
+  ["Compare flexible travel dates", false, true, true],
+  ["AI trip refinements", false, true, true],
+  ["Priority support", false, false, true],
 ];
 
 function Subscription() {
@@ -290,8 +294,30 @@ function Subscription() {
   const router = useRouter();
   const toast = useToast();
   const params = useSearchParams();
-  const [busy, setBusy] = useState<PlanId | null>(null);
+  const [busy, setBusy] = useState<PlanId | "portal" | null>(null);
+  const [interval, setBilling] = useState<BillingInterval>(params.get("interval") === "year" ? "year" : "month");
   const current = planById(subscription.plan);
+  const paying = subscription.source === "stripe" && subscription.plan !== "free";
+
+  const authHeader = async (): Promise<Record<string, string>> => {
+    const token = auth.mode === "cloud" ? (await getSupabase()?.auth.getSession())?.data.session?.access_token : undefined;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  // Cancel, switch plan, update the card and get invoices, all in Stripe's billing portal.
+  const openPortal = async () => {
+    setBusy("portal");
+    try {
+      const r = await fetch("/api/billing/portal", { method: "POST", headers: await authHeader() });
+      const data = await r.json().catch(() => ({}));
+      if (data.url) window.location.href = data.url;
+      else toast({ tone: "error", title: "Couldn't open billing", description: data.error ?? "Please try again." });
+    } catch {
+      toast({ tone: "error", title: "Couldn't reach the server", description: "Check your connection and try again." });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     const c = params.get("checkout");
@@ -305,19 +331,20 @@ function Subscription() {
       if (subscription.source === "demo") {
         store.setDemoPlan("free");
         toast({ tone: "info", title: "Back on Free", description: "The demo preview has ended." });
-      } else toast({ tone: "info", title: "Manage billing in Stripe", description: "Plan downgrades are handled by the billing portal once connected." });
+      } else if (paying) openPortal();
       return;
     }
+    // Subscribers switch plans in the portal (prorated) rather than starting a second subscription.
+    if (paying) return openPortal();
     setBusy(plan);
     try {
-      const token = auth.mode === "cloud" ? (await getSupabase()?.auth.getSession())?.data.session?.access_token : undefined;
       const r = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ plan }),
+        headers: { "Content-Type": "application/json", ...(await authHeader()) },
+        body: JSON.stringify({ plan, interval }),
       });
       const data = await r.json();
-      if (data.demo) router.push(`/checkout/demo?plan=${plan}`);
+      if (data.demo) router.push(`/checkout/demo?plan=${plan}&interval=${interval}`);
       else if (data.url) window.location.href = data.url;
       else toast({ tone: "error", title: "Couldn't start checkout", description: data.error ?? "Please try again." });
     } catch {
@@ -328,20 +355,40 @@ function Subscription() {
   };
 
   return (
-    <Section title="Subscription" desc="Prices in CAD, billed monthly. These are provisional product settings, not final pricing.">
+    <Section title="Subscription" desc="Prices in US dollars, plus applicable taxes. Billed monthly or yearly; cancel any time and paid features continue until the end of the period you've paid for.">
       <div className="sgroup" style={{ marginBottom: 16 }}>
         <Row
           label={`Current plan: ${current.name}${subscription.source === "demo" ? " (demo preview)" : ""}`}
-          hint={`${trackers.length} of ${current.limits.trackers} tracked prices · ${saved.length} of ${current.limits.saved} saved offers${subscription.source === "demo" ? " · No payment was taken." : ""}`}
+          hint={`${trackers.length} of ${limitText(current.limits.trackers)} tracked prices · ${saved.length} of ${limitText(current.limits.saved)} saved offers · ${limitText(current.limits.searches)} AI flight searches a month${subscription.source === "demo" ? " · No payment was taken." : ""}`}
         >
           <span className={cx("badge", subscription.plan !== "free" && "badge--accent")}>
             <Sparkles />
             {current.name}
           </span>
         </Row>
+        {subscription.status === "canceling" && (
+          <Row label="Cancellation scheduled" hint="Your plan stays active until the end of the current billing period, then switches to Free. You can undo this in billing.">
+            <span className="badge badge--warning">Ends at period end</span>
+          </Row>
+        )}
+        {subscription.status === "past_due" && (
+          <Row label="Payment didn't go through" hint="Stripe will try your card again. Update your payment method to keep your plan.">
+            <span className="badge badge--error">Payment due</span>
+          </Row>
+        )}
+        {paying && (
+          <Row label="Billing" hint="Change or cancel your plan, update your card, and download invoices. Handled securely by Stripe.">
+            <button className="btn btn--secondary" onClick={openPortal} disabled={busy !== null}>
+              <CreditCard />
+              {busy === "portal" ? "Opening…" : "Manage billing"}
+            </button>
+          </Row>
+        )}
       </div>
 
-      <div className="plans">
+      {!paying && <BillingSwitch interval={interval} onChange={setBilling} saving={YEARLY_SAVING} />}
+
+      <div className="plans" style={{ marginTop: paying ? 0 : 20 }}>
         {PLANS.map((p) => {
           const isCurrent = p.id === subscription.plan;
           const featured = p.id === "plus";
@@ -354,9 +401,10 @@ function Subscription() {
                 {isCurrent && !featured && <span className="badge">Current</span>}
               </div>
               <div className="plan__price">
-                <b className="num">{moneyExact(p.monthlyCAD, "CAD", store.settings.locale)}</b>
-                <span>/ month</span>
+                <b className="num">{usd(planPrice(p, interval).perMonth)}</b>
+                <span>USD / month</span>
               </div>
+              {p.monthlyUSD > 0 && <p className="t-meta">{interval === "year" ? `Billed ${usd(planPrice(p, "year").charged)} yearly` : "Billed monthly"}</p>}
               <p className="plan__tag">{p.tagline}</p>
               <ul className="plan__features">
                 {p.features.map((f) => (
@@ -371,7 +419,7 @@ function Subscription() {
                 disabled={isCurrent || busy !== null}
                 onClick={() => upgrade(p.id)}
               >
-                {isCurrent ? "Current plan" : busy === p.id ? "Opening checkout…" : p.id === "free" ? "Switch to Free" : `Choose ${p.name}`}
+                {isCurrent ? "Current plan" : busy === p.id ? "Opening checkout…" : p.id === "free" ? (paying ? "Cancel in billing" : "Switch to Free") : paying ? `Switch to ${p.name}` : `Choose ${p.name}`}
               </button>
             </div>
           );

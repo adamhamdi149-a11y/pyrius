@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { entitlementFor, stripe, type StripeSubscription } from "@/lib/stripe";
 import { downgradeBySubscriptionId, upsertSubscription } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -15,6 +16,24 @@ function verify(payload: string, header: string | null, secret: string) {
   return sigs.some((s) => s.length === expected.length && timingSafeEqual(Buffer.from(s), Buffer.from(expected)));
 }
 
+/**
+ * Records what Stripe says about a subscription right now. Every event re-reads the subscription
+ * from Stripe, so events that arrive late, twice or out of order still end in the right plan.
+ */
+async function sync(subscriptionId: string, fallbackUserId?: string) {
+  const sub = await stripe<StripeSubscription>(`subscriptions/${encodeURIComponent(subscriptionId)}`);
+  const userId = sub.metadata?.user_id || fallbackUserId;
+  const { plan, status } = entitlementFor(sub);
+  if (!userId) {
+    // Not created by Pyrius checkout (no user attached): only ever downgrade by id.
+    if (plan === "free") await downgradeBySubscriptionId(sub.id);
+    return;
+  }
+  await upsertSubscription({ user_id: userId, plan, status, stripe_customer_id: sub.customer, stripe_subscription_id: sub.id });
+}
+
+const SUBSCRIPTION_EVENTS = new Set(["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.paused", "customer.subscription.resumed"]);
+
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) return NextResponse.json({ error: "Webhook not configured" }, { status: 501 });
@@ -23,24 +42,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
   const event = JSON.parse(payload);
+  const obj = event.data?.object ?? {};
   try {
-    if (event.type === "checkout.session.completed") {
-      const s = event.data.object;
-      const plan = s.metadata?.plan === "pro" ? "pro" : "plus";
-      if (s.client_reference_id) {
-        await upsertSubscription({
-          user_id: s.client_reference_id,
-          plan,
-          status: "active",
-          stripe_customer_id: s.customer,
-          stripe_subscription_id: s.subscription,
-        });
-      }
-    } else if (event.type === "customer.subscription.deleted") {
-      await downgradeBySubscriptionId(event.data.object.id);
+    if (event.type === "checkout.session.completed" && obj.mode === "subscription" && obj.subscription) {
+      await sync(obj.subscription, obj.client_reference_id ?? undefined);
+    } else if (SUBSCRIPTION_EVENTS.has(event.type) && obj.id) {
+      await sync(obj.id);
+    } else if ((event.type === "invoice.payment_failed" || event.type === "invoice.paid") && obj.subscription) {
+      await sync(obj.subscription);
     }
   } catch (err) {
-    console.error("Webhook handling failed:", err);
+    // A non-2xx makes Stripe retry the event later.
+    console.error("Webhook handling failed:", event.type, (err as Error).message);
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
   return NextResponse.json({ received: true });

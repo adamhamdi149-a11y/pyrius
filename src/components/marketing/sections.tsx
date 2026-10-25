@@ -3,7 +3,8 @@ import { ArrowRight, Check, ChevronDown, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 import { Orb } from "@/components/ai/Orb";
-import { PLANS } from "@/lib/plans";
+import { planPrice, PLANS, usd, YEARLY_SAVING } from "@/lib/plans";
+import type { BillingInterval } from "@/lib/types";
 import { useStore } from "@/lib/store/AppStore";
 import { FAQS, type FaqItem } from "./faq";
 import { carryDraft } from "./useTryHref";
@@ -15,12 +16,31 @@ const goto = (id: string) => (e: React.MouseEvent) => {
 
 /* ---------- Pricing: the same plan catalogue the app bills from ---------- */
 
+/** Monthly · [switch] · Annually. A real switch, so it reads and works the same with a keyboard or screen reader. */
+export function BillingSwitch({ interval, onChange, saving }: { interval: BillingInterval; onChange: (i: BillingInterval) => void; saving?: number }) {
+  const yearly = interval === "year";
+  return (
+    <div className="mk-billing">
+      <button type="button" className="mk-billing__label" data-on={!yearly} onClick={() => onChange("month")}>
+        Monthly
+      </button>
+      <button type="button" role="switch" aria-checked={yearly} aria-label="Bill annually" className="mk-billing__switch" onClick={() => onChange(yearly ? "month" : "year")}>
+        <i />
+      </button>
+      <button type="button" className="mk-billing__label" data-on={yearly} onClick={() => onChange("year")}>
+        Annually
+      </button>
+      {saving ? <span className="mk-billing__save">Save up to {saving}%</span> : null}
+    </div>
+  );
+}
+
 export function Pricing({ tryHref }: { tryHref: string }) {
   const { auth, ready } = useStore();
+  const [interval, setBilling] = useState<BillingInterval>("month");
   const signedIn = ready && auth.mode !== "signed-out";
-  const billing = "/settings?section=subscription";
+  const billing = `/settings?section=subscription&interval=${interval}`;
   const paidHref = signedIn ? billing : `/login?mode=signup&next=${encodeURIComponent(billing)}`;
-  const money = (n: number) => `$${n % 1 ? n.toFixed(2) : n}`;
 
   return (
     <section className="mk-pricing" id="pricing" aria-labelledby="pricing-title">
@@ -31,21 +51,31 @@ export function Pricing({ tryHref }: { tryHref: string }) {
         <h2 id="pricing-title" className="mkf-h2">
           Start free. <em>Upgrade when you travel more.</em>
         </h2>
-        <p>Every plan includes the AI concierge. Prices in Canadian dollars, billed monthly, plus applicable taxes. Cancel any time.</p>
+        <p>Every plan includes the AI concierge. Prices in US dollars, plus applicable taxes. Cancel any time.</p>
+      </div>
+      <div className="mkf-rise">
+        <BillingSwitch interval={interval} onChange={setBilling} saving={YEARLY_SAVING} />
       </div>
       <div className="mk-plans">
         {PLANS.map((p) => {
-          const free = p.monthlyCAD === 0;
+          const free = p.monthlyUSD === 0;
           const pick = p.id === "plus";
+          const price = planPrice(p, interval);
           return (
             <article key={p.id} className="mk-plan mkf-rise" data-pick={pick} aria-labelledby={`plan-${p.id}`}>
               {pick && <span className="mk-plan__pick">Our pick</span>}
               <h3 id={`plan-${p.id}`}>{p.name}</h3>
               <p className="mk-plan__tag">{p.tagline}</p>
-              <p className="mk-plan__price">
-                <b>{money(p.monthlyCAD)}</b>
-                <span>CAD / month</span>
-              </p>
+              <div className="mk-plan__cost">
+                <p className="mk-plan__price" aria-live="polite">
+                  <b key={`${p.id}-${interval}`}>{usd(price.perMonth)}</b>
+                  <span>USD / month</span>
+                </p>
+                <p className="mk-plan__billed">
+                  {free ? "Free forever" : interval === "year" ? `Billed ${usd(price.charged)} yearly` : "Billed monthly"}
+                  {!free && interval === "year" && <s>{usd(p.monthlyUSD)}</s>}
+                </p>
+              </div>
               <Link href={free ? tryHref : paidHref} className={`mk-btn mk-btn--block ${pick ? "mk-btn--primary" : "mk-btn--ghost"}`} onClick={free ? carryDraft : undefined}>
                 {free ? "Start free" : `Choose ${p.name}`}
                 <ArrowRight />

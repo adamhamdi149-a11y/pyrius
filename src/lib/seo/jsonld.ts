@@ -1,5 +1,5 @@
 import { FAQS } from "@/components/marketing/faq";
-import { PLANS } from "@/lib/plans";
+import { planPrice, PLANS } from "@/lib/plans";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 /**
@@ -40,15 +40,18 @@ export function homeJsonLd() {
         operatingSystem: "Web browser",
         browserRequirements: "Requires JavaScript",
         publisher: { "@id": org },
-        offers: PLANS.map((p) => ({
-          "@type": "Offer",
-          name: p.name,
-          description: p.tagline,
-          price: p.monthlyCAD.toFixed(2),
-          priceCurrency: "CAD",
-          category: p.monthlyCAD === 0 ? "free" : "subscription",
-          url: `${SITE_URL}/#pricing`,
-        })),
+        offers: PLANS.flatMap((p) =>
+          (p.monthlyUSD === 0 ? (["month"] as const) : (["month", "year"] as const)).map((interval) => ({
+            "@type": "Offer",
+            name: p.monthlyUSD === 0 ? p.name : `${p.name} (${interval === "year" ? "yearly" : "monthly"})`,
+            description: p.tagline,
+            price: planPrice(p, interval).charged.toFixed(2),
+            priceCurrency: "USD",
+            category: p.monthlyUSD === 0 ? "free" : "subscription",
+            ...(p.monthlyUSD ? { priceSpecification: { "@type": "UnitPriceSpecification", price: planPrice(p, interval).charged.toFixed(2), priceCurrency: "USD", billingDuration: interval === "year" ? "P1Y" : "P1M" } } : {}),
+            url: `${SITE_URL}/#pricing`,
+          })),
+        ),
         featureList: ["Plan trips by describing them in your own words", "Live flight search and comparison", "Save offers", "Price tracking", "Hotels and rental cars for the same dates"],
       },
       {
