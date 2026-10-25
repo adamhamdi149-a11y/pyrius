@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { openGraph } from "@/lib/site";
 import Link from "next/link";
 import { LegalDoc, PRIVACY_EMAIL, type LegalSection } from "@/components/marketing/LegalDoc";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "The terms that apply when you use Pyrius.",
+  description: "The terms that apply when you use Pyrius, the AI travel concierge: accounts, plans and billing, bookings with travel providers, and your rights as a consumer.",
+  alternates: { canonical: "/legal/terms" },
+  openGraph: openGraph("/legal/terms", "Terms of Service · Pyrius", "The terms that apply when you use Pyrius, the AI travel concierge: accounts, plans and billing, bookings with travel providers, and your rights as a consumer."),
 };
 
 const mail = <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>;

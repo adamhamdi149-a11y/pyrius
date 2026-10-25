@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { Orb } from "@/components/ai/Orb";
 import { PLANS } from "@/lib/plans";
 import { useStore } from "@/lib/store/AppStore";
+import { FAQS, type FaqItem } from "./faq";
 import { carryDraft } from "./useTryHref";
 
 const goto = (id: string) => (e: React.MouseEvent) => {
@@ -168,49 +169,25 @@ export function Compare({ tryHref }: { tryHref: string }) {
 
 /* ---------- FAQ ---------- */
 
-const FAQS: { q: string; a: React.ReactNode }[] = [
-  {
-    q: "What is Pyrius?",
-    a: "An AI travel concierge. You describe a trip in your own words, Pyrius asks for what it still needs, then lays out flights you can compare, save and track, with stays and rental cars for the same dates.",
-  },
-  {
-    q: "Does Pyrius book my trip?",
-    a: "No. Pyrius isn't a travel agency and never takes payment for travel. When you choose an offer, you go to the airline or booking site and book with them directly.",
-  },
-  {
-    q: "Are the prices real?",
-    a: "The prices on this website are illustrative examples. Inside Pyrius, results are clearly labeled, and while live provider connections are being added some results use sample data. The price that counts is always the one the airline or booking site shows you before you pay.",
-  },
-  {
-    q: "How much does it cost?",
-    a: (
-      <>
-        Pyrius is free to start. Plus and Pro add more tracked prices, more saved offers and alerts. See{" "}
-        <a href="#pricing" onClick={goto("pricing")}>
-          Pricing
-        </a>{" "}
-        for what each plan includes.
-      </>
-    ),
-  },
-  {
-    q: "Can I cancel a paid plan?",
-    a: "Yes, at any time. Your paid features continue until the end of the month you've already paid for.",
-  },
-  {
-    q: "Do I need an account?",
-    a: "Yes, a free one. It keeps your conversations, saved offers and tracked prices together, on every device you sign in from.",
-  },
-  {
-    q: "What happens to my data?",
-    a: (
-      <>
-        Your trips and saved offers are stored in your account. We don&apos;t sell or rent personal information, and we don&apos;t use advertising trackers. The details are
-        in our <Link href="/legal/privacy">Privacy Policy</Link>.
-      </>
-    ),
-  },
-];
+/** An answer with its one linked phrase (in-page links glide with the smooth scroller). */
+function Answer({ item }: { item: FaqItem }) {
+  if (!item.link) return <>{item.a}</>;
+  const [before, after] = item.a.split(item.link.text);
+  const { href, text } = item.link;
+  return (
+    <>
+      {before}
+      {href.startsWith("#") ? (
+        <a href={href} onClick={goto(href.slice(1))}>
+          {text}
+        </a>
+      ) : (
+        <Link href={href}>{text}</Link>
+      )}
+      {after}
+    </>
+  );
+}
 
 export function Faq() {
   const [open, setOpen] = useState<number | null>(0);
@@ -238,7 +215,9 @@ export function Faq() {
               </h3>
               <div className="mk-faq__a" id={`${base}-a${i}`} role="region" aria-labelledby={`${base}-q${i}`}>
                 <div>
-                  <p>{item.a}</p>
+                  <p>
+                    <Answer item={item} />
+                  </p>
                 </div>
               </div>
             </div>

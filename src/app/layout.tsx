@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
+import { openGraph, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 import { AppStoreProvider } from "@/lib/store/AppStore";
 import "@/styles/tokens.css";
 import "@/styles/motion.css";
@@ -17,9 +18,22 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "sw
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "Pyrius — AI travel concierge", template: "%s · Pyrius" },
-  description: "Describe a trip in your own words. Pyrius finds flights, stays and cars, and tracks the prices you care about.",
-  icons: { icon: "/icon.svg" },
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: "%s · Pyrius" },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: ["AI travel concierge", "AI flight search", "flight search", "cheap flights", "travel planner", "trip planner", "price tracking", "flights from Canada", "Pyrius"],
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  category: "travel",
+  formatDetection: { telephone: false, email: false, address: false },
+  openGraph: openGraph("/"),
+  twitter: { card: "summary_large_image", title: SITE_TITLE, description: SITE_DESCRIPTION },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }] },
+  // Search Console's HTML-tag verification, if you use that method (set it in Vercel's environment variables).
+  ...(process.env.GOOGLE_SITE_VERIFICATION ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } } : {}),
 };
 
 export const viewport: Viewport = {

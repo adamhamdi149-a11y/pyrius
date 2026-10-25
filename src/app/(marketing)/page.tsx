@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import { Landing } from "@/components/marketing/Landing";
+import { homeJsonLd } from "@/lib/seo/jsonld";
+import { openGraph, SITE_DESCRIPTION, SITE_TITLE } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: { absolute: "Pyrius — Flight search, reimagined" },
-  description: "Describe your trip in your own words. Pyrius, the AI travel concierge, asks what matters and lays out flights you can compare, save and track.",
-  openGraph: {
-    title: "Pyrius — Flight search, reimagined",
-    description: "The future of flight search isn't another search engine. It's a conversation.",
-    url: "https://www.pyrius.app",
-    siteName: "Pyrius",
-    type: "website",
-  },
+  title: { absolute: SITE_TITLE },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: openGraph("/"),
 };
 
 export default function Home() {
-  return <Landing />;
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd()) }} />
+      <Landing />
+    </>
+  );
 }
