@@ -1,5 +1,6 @@
 import { placeName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
+import { nextStep, resultsMatch } from "@/lib/flights/workflow";
 import type { HotelBrief } from "@/lib/hotels/brief";
 import { flightMode, getProviders } from "@/lib/providers";
 import type { AgentReply, AgentStage, Attachment, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
@@ -189,6 +190,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     stage: req.stage,
     saved: req.saved,
     flightMode: flightMode(),
+    hasResults: Boolean(results.flights?.shown.length && resultsMatch(state.trip, [results.flights.params], req.today)),
   });
 
   const input: unknown[] = [
@@ -222,11 +224,18 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
   // Server-side boundary: an off-topic reply stays short and can't carry results, changes or sources.
   const offTopic = final.topic === "off_topic" && state.toolCalls === 0;
   const reply = offTopic ? clip(final.reply, 280) : clip(final.reply, 1400);
-  const chips: Chip[] = [...new Set(final.suggestions.map((s) => s.trim()).filter((s) => s && s.length <= 48))]
-    .slice(0, 3)
-    .map((label) => ({ label, action: { type: "say", text: label } }));
-
   const t = state.trip;
+  // While flight details are being collected the app shows the workflow's own control, so the model's
+  // suggestions are dropped; afterwards only specific ones are kept.
+  const flightResultsOnScreen = state.searched === "flights" || Boolean(results.flights?.shown.length && resultsMatch(t, [results.flights.params], req.today));
+  const collecting = nextStep(t, flightResultsOnScreen) !== "results" && state.searched !== "hotels" && !results.hotels;
+  // With flight results on screen, the app shows its own refinements (Cheapest, Fastest, Fewest stops…).
+  const chips: Chip[] = collecting || flightResultsOnScreen
+    ? []
+    : [...new Set(final.suggestions.map((s) => s.trim()).filter((s) => s && s.length <= 48 && !GENERIC.test(s)))]
+        .slice(0, 3)
+        .map((label) => ({ label, action: { type: "say", text: label } }));
+
   const stage: AgentStage = state.searched ?? (req.stage === "collecting" || !req.stage ? "collecting" : req.stage);
   const attachments: Attachment[] = offTopic ? [] : state.attachments;
   return {
@@ -241,6 +250,9 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     engine: "openai",
   };
 }
+
+/** Suggestions that never help someone finish a search. */
+const GENERIC = /^(tell me more|sounds good|surprise me|ok(ay)?|yes|no|thanks?|thank you|continue|go ahead|great|perfect|cool)[.!]?$/i;
 
 function clip(s: string, max: number) {
   if (s.length <= max) return s;

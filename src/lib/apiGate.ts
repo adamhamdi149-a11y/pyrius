@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { allow } from "@/lib/ai/concierge/rateLimit";
 import { isAirportCode } from "@/lib/data/world";
+import { travelersProblem } from "@/lib/flights/workflow";
 import { getUserFromRequest } from "@/lib/supabase/server";
 import type { BusinessCategory, FlightSearchParams, HotelSearchParams } from "@/lib/types";
 
@@ -30,7 +31,9 @@ export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
   const p = (v && typeof v === "object" ? v : {}) as Partial<FlightSearchParams>;
   if (!isAirportCode(p.originCode) || !isAirportCode(p.destinationCode)) return undefined;
   if (p.originCode === p.destinationCode || !isDate(p.departDate)) return undefined;
-  const returnDate = isDate(p.returnDate) && p.returnDate > p.departDate ? p.returnDate : undefined;
+  const returnDate = isDate(p.returnDate) && p.returnDate >= p.departDate ? p.returnDate : undefined;
+  const pax = { adults: intIn(p.adults, 1, 9) ?? 1, children: intIn(p.children, 0, 8) ?? 0, infants: intIn(p.infants, 0, 8) ?? 0 };
+  if (travelersProblem(pax)) return undefined;
   return {
     originCode: p.originCode,
     destinationCode: p.destinationCode,
@@ -38,6 +41,8 @@ export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
     returnDate,
     adults: intIn(p.adults, 1, 9) ?? 1,
     children: intIn(p.children, 0, 8) ?? 0,
+    infants: intIn(p.infants, 1, 8),
+    cabin: p.cabin === "premium_economy" || p.cabin === "business" || p.cabin === "first" ? p.cabin : undefined,
     currency: p.currency === "USD" || p.currency === "EUR" ? p.currency : "CAD",
     nonstopOnly: p.nonstopOnly === true || undefined,
   };

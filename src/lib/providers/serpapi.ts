@@ -155,6 +155,9 @@ function baseParams(p: FlightSearchParams): Record<string, string> {
     ...(p.returnDate ? { return_date: p.returnDate, type: "1" } : { type: "2" }),
     adults: String(p.adults),
     children: String(p.children),
+    ...(p.infants ? { infants_on_lap: String(p.infants) } : {}),
+    // Google Flights: 1 economy, 2 premium economy, 3 business, 4 first.
+    ...(p.cabin && p.cabin !== "economy" ? { travel_class: String({ premium_economy: 2, business: 3, first: 4 }[p.cabin]) } : {}),
     currency: p.currency,
     // "View more flights": without it Google returns only a handful of top picks (often only nonstops).
     show_hidden: "true",
@@ -164,6 +167,7 @@ function baseParams(p: FlightSearchParams): Record<string, string> {
 
 const toIso = (t?: string) => (t ? t.replace(" ", "T").slice(0, 16) : "");
 const CABINS: Record<string, FlightOffer["cabin"]> = { economy: "Economy", "premium economy": "Premium Economy", business: "Business", first: "First" };
+const CABIN_NAMES: Record<NonNullable<FlightSearchParams["cabin"]>, FlightOffer["cabin"]> = { economy: "Economy", premium_economy: "Premium Economy", business: "Business", first: "First" };
 const color = (code: string) => `hsl(${hash(code) % 360} 55% 42%)`;
 
 function segment(it: SerpItinerary): FlightSegment | null {
@@ -201,7 +205,7 @@ export function toOffer(it: SerpItinerary, p: FlightSearchParams, fetchedAt: str
   const first = it.flights![0];
   const airlines = [...new Set(it.flights!.map((f) => f.airline).filter(Boolean))] as string[];
   const code = (first.flight_number ?? "").split(" ")[0] || (first.airline ?? "??").slice(0, 2).toUpperCase();
-  const travelers = p.adults + p.children;
+  const travelers = p.adults + p.children + (p.infants ?? 0);
   const round = Boolean(p.returnDate);
   const notes = [
     ...(it.flights ?? []).flatMap((f) => (f.often_delayed_by_over_30_min ? [`${f.flight_number} is often delayed by 30+ min`] : [])),
@@ -214,7 +218,8 @@ export function toOffer(it: SerpItinerary, p: FlightSearchParams, fetchedAt: str
     airline: { code, name: airlines.join(" + ") || code, color: color(code), logo: it.airline_logo ?? first.airline_logo },
     outbound: seg,
     places: { from: findAirport(seg.from)?.city ?? seg.from, to: findAirport(seg.to)?.city ?? seg.to },
-    cabin: CABINS[(first.travel_class ?? "economy").toLowerCase()] ?? "Economy",
+    // Google labels each flight "Economy" even in a business search, so the class searched for wins.
+    cabin: p.cabin ? CABIN_NAMES[p.cabin] : (CABINS[(first.travel_class ?? "economy").toLowerCase()] ?? "Economy"),
     totalPrice: Math.round(it.price),
     pricePerTraveler: Math.round(it.price / Math.max(1, travelers)),
     currency: p.currency,

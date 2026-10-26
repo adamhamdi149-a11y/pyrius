@@ -1,10 +1,11 @@
 "use client";
 import { AlertTriangle, ArrowRight, Briefcase, CalendarDays, ChevronDown, Clock, Luggage, Pencil, Plane, Radio, RotateCcw, SlidersHorizontal, Users, Zap, BadgeDollarSign } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { authHeaders } from "@/lib/authHeaders";
 import { Dialog } from "@/components/ui/Dialog";
 import { DemoBadge, EmptyState, Skeleton, useDismiss } from "@/components/ui/primitives";
 import { findAirport } from "@/lib/data/world";
+import { CABIN_LABEL } from "@/lib/flights/workflow";
 import { useStore } from "@/lib/store/AppStore";
 import type { Attachment, FlightOffer, FlightSegment, FlightSnapshot } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
@@ -15,7 +16,7 @@ import { OfferActions } from "./OfferActions";
 import { SearchProgress, SourceLine } from "./SearchProgress";
 
 type FlightAttachment = Extract<Attachment, { type: "flights" }>;
-type Sort = "price" | "duration" | "depart";
+type Sort = "price" | "duration" | "depart" | "stops";
 type Stops = "any" | "0" | "1";
 type Window = "any" | "morning" | "afternoon" | "evening";
 
@@ -51,8 +52,15 @@ export function applyFlightFilters(offers: FlightOffer[], f: Filters) {
     return true;
   });
   const total = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
+  const stops = (o: FlightOffer) => o.outbound.stops + (o.inbound?.stops ?? 0);
   return list.sort((a, b) =>
-    f.sort === "duration" ? total(a) - total(b) || a.totalPrice - b.totalPrice : f.sort === "depart" ? a.outbound.depart.localeCompare(b.outbound.depart) : a.totalPrice - b.totalPrice,
+    f.sort === "duration"
+      ? total(a) - total(b) || a.totalPrice - b.totalPrice
+      : f.sort === "depart"
+        ? a.outbound.depart.localeCompare(b.outbound.depart)
+        : f.sort === "stops"
+          ? stops(a) - stops(b) || a.totalPrice - b.totalPrice
+          : a.totalPrice - b.totalPrice,
   );
 }
 
@@ -377,7 +385,22 @@ export function SearchSummary({
   );
 }
 
-export function FlightResults({ attachment, conversationId, onSaved, onEdit }: { attachment: FlightAttachment; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; onEdit?: () => void }) {
+export function FlightResults({
+  attachment,
+  conversationId,
+  onSaved,
+  onEdit,
+  outdated,
+  onSearchAgain,
+}: {
+  attachment: FlightAttachment;
+  conversationId?: string;
+  onSaved?: (k: "flight" | "hotel" | "car") => void;
+  onEdit?: () => void;
+  /** The trip has changed since these results were found. */
+  outdated?: boolean;
+  onSearchAgain?: () => void;
+}) {
   const { settings } = useStore();
   // Results that came with the reply are shown as they were found; others (and refreshes) are searched here.
   const [fresh, setFresh] = useState<FlightSnapshot | null>(null);
@@ -411,6 +434,11 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
     carryOn: Boolean(attachment.filters?.carryOnOnly),
   };
   const [f, setF] = useState<Filters>(init);
+  // "Cheapest", "Fastest" and "Fewest stops" under the results re-sort these cards.
+  const wanted = attachment.filters?.sort;
+  useEffect(() => {
+    if (wanted) setF((x) => (x.sort === wanted ? x : { ...x, sort: wanted }));
+  }, [wanted]);
   const [sheet, setSheet] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const set = (p: Partial<Filters>) => setF((x) => ({ ...x, ...p }));
@@ -418,7 +446,8 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
   const locale = settings.locale;
   const o = findAirport(p.originCode);
   const d = findAirport(p.destinationCode);
-  const travelers = p.adults + p.children;
+  const travelers = p.adults + p.children + (p.infants ?? 0);
+  const cabin = p.cabin && p.cabin !== "economy" ? ` · ${CABIN_LABEL[p.cabin]}` : "";
 
   const offers = useMemo(() => snap?.offers ?? [], [snap]);
   const list = useMemo(() => applyFlightFilters([...offers], f), [offers, f]);
@@ -437,11 +466,24 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
         from={o ? `${o.city} ${o.code}` : p.originCode}
         to={d ? `${d.city} ${d.code}` : p.destinationCode}
         dates={formatRange(p.departDate, p.returnDate, locale)}
-        people={`${travelers} traveler${travelers > 1 ? "s" : ""}`}
+        people={`${travelers} traveler${travelers > 1 ? "s" : ""}${cabin}`}
         currency={p.currency}
         onEdit={onEdit}
         live={live}
+        kind={attachment.leg ? `Flight ${attachment.leg.index + 1} of ${attachment.leg.count}` : undefined}
       />
+      {outdated && (
+        <div className="results__stale" role="status">
+          <Clock />
+          <span>Your trip has changed since these flights were found.</span>
+          {onSearchAgain && (
+            <button className="btn btn--primary btn--sm" onClick={onSearchAgain}>
+              <RotateCcw />
+              Search again
+            </button>
+          )}
+        </div>
+      )}
 
       {!snap && res.status === "loading" && (
         <SearchProgress what={`flights ${p.originCode} → ${p.destinationCode}`} source="Flight search">
@@ -491,6 +533,7 @@ export function FlightResults({ attachment, conversationId, onSaved, onEdit }: {
                 [
                   ["price", "Lowest price"],
                   ["duration", "Shortest"],
+                  ["stops", "Fewest stops"],
                   ["depart", "Earliest"],
                 ] as const
               ).map(([k, l]) => (

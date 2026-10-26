@@ -33,6 +33,8 @@ export interface TripPreferences {
   flexibleDates?: boolean;
   adults?: number;
   children?: number;
+  /** Lap infants (under 2). */
+  infants?: number;
   budget?: number; // total, 0 = no budget
   nonstopOnly?: boolean;
   carryOnOnly?: boolean;
@@ -46,8 +48,17 @@ export interface TripPreferences {
   // Car
   carMode?: "rental" | "agencies" | "dealerships";
   // Kept by the AI concierge
-  tripType?: "round" | "oneway";
-  cabin?: "economy" | "premium_economy" | "business" | "first";
+  tripType?: "round" | "oneway" | "multi";
+  cabin?: Cabin;
+  /** Multi-city: each flight of the route, in order. */
+  legs?: TripLeg[];
+  /** A place the user named that isn't one airport yet ("Japan", "London"): the airport picker opens on it. */
+  originQuery?: string;
+  destinationQuery?: string;
+  /** Month the calendar opens on when the user named one without exact dates (YYYY-MM). */
+  calendarMonth?: string;
+  /** Which values the user chose, as opposed to defaults the app shows. */
+  confirmed?: { tripType?: boolean; travelers?: boolean; cabin?: boolean };
   departureTime?: "morning" | "afternoon" | "evening";
   /** When the user gave a per-person budget; `budget` then holds the total for everyone. */
   budgetPerPerson?: number;
@@ -56,6 +67,14 @@ export interface TripPreferences {
   // Conversation bookkeeping (not shown to the user)
   awaiting?: AwaitField;
   askedPrefs?: boolean;
+}
+
+export type Cabin = "economy" | "premium_economy" | "business" | "first";
+
+export interface TripLeg {
+  from?: string;
+  to?: string;
+  date?: string; // YYYY-MM-DD
 }
 
 export type AwaitField = "origin" | "destination" | "warm-pick" | "dates" | "duration" | "travelers" | "budget" | "prefs" | "stay-details";
@@ -67,6 +86,9 @@ export interface FlightSearchParams {
   returnDate?: string;
   adults: number;
   children: number;
+  /** Lap infants (under 2). */
+  infants?: number;
+  cabin?: Cabin;
   currency: Currency;
   nonstopOnly?: boolean;
 }
@@ -318,8 +340,10 @@ export type Attachment =
       type: "flights";
       params: FlightSearchParams;
       budget?: number;
-      filters?: { nonstopOnly?: boolean; carryOnOnly?: boolean; sort?: "price" | "duration" | "depart" };
+      filters?: { nonstopOnly?: boolean; carryOnOnly?: boolean; sort?: "price" | "duration" | "depart" | "stops" };
       snapshot?: FlightSnapshot;
+      /** Multi-city: which flight of the route these results are for. */
+      leg?: { index: number; count: number };
     }
   | { type: "hotels"; params: HotelSearchParams; budgetPerNight?: number; sort?: "luxury"; snapshot?: HotelSnapshot }
   /** Older conversations: rental-car estimates, now shown as the local rental agencies. */

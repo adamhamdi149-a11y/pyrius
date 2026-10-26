@@ -1,5 +1,6 @@
 import { airportLabel, findAirport, isAirportCode, nearbyAirports, placeName as cityName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
+import { CABIN_LABEL, departProblem, MAX_LEGS, missingFields, nextActionSpec, searchPlan, searchProblems, setTripKind, travelersOf, travelersProblem } from "@/lib/flights/workflow";
 import { hotelBrief, sortStays, type HotelBrief } from "@/lib/hotels/brief";
 import { planById } from "@/lib/plans";
 import { getProviders } from "@/lib/providers";
@@ -69,22 +70,40 @@ export const TOOLS = [
       type: "object",
       additionalProperties: false,
       properties: {
-        origin_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the departure airport; any airport worldwide (YUL, TUN, NBO…)." },
-        destination_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the destination airport; any airport worldwide (FCO, DJE, DSS…)." },
-        depart_date: nullable({ type: "string", description: "Departure date, YYYY-MM-DD." }),
-        return_date: nullable({ type: "string", description: "Return date, YYYY-MM-DD." }),
+        origin_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the departure airport, only when the place clearly means one airport (YUL, TUN, NBO…)." },
+        destination_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the destination airport, only when the place clearly means one airport (FCO, DJE, DXB…)." },
+        origin_query: nullable({ type: "string", description: "The departure place in the user's words when it isn't one airport: a country, a region, or a city whose airports differ in a way that matters. The app then shows an airport picker for it. Null otherwise." }),
+        destination_query: nullable({ type: "string", description: "The destination in the user's words when it isn't one airport (\"Japan\", \"the Caribbean\"). The app then shows an airport picker for it. Null otherwise." }),
+        depart_date: nullable({ type: "string", description: "Departure date, YYYY-MM-DD, only when the user named a specific day." }),
+        return_date: nullable({ type: "string", description: "Return date, YYYY-MM-DD, only when the user named a specific day." }),
         trip_length_days: nullable({ type: "integer", description: "Trip length in days when the user gave a length instead of a return date." }),
-        trip_type: { ...nEnum(["round_trip", "one_way"]), description: "Only when the user says so. one_way removes the return date by itself; keep the departure date." },
+        calendar_month: nullable({ type: "string", description: "YYYY-MM when the user gave only a month or season (\"in April\"), so the calendar opens there. Never turn it into dates." }),
+        trip_type: { ...nEnum(["round_trip", "one_way", "multi_city"]), description: "Only when the user says so. one_way removes the return date by itself; keep the departure date." },
+        legs: {
+          type: ["array", "null"],
+          description: "Multi-city only: every flight of the route in order, as the user described it. Null otherwise.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              from_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$" },
+              to_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$" },
+              date: { type: ["string", "null"], description: "YYYY-MM-DD" },
+            },
+            required: ["from_code", "to_code", "date"],
+          },
+        },
         flexible_dates: nullable({ type: "boolean" }),
         adults: nullable({ type: "integer" }),
-        children: nullable({ type: "integer" }),
+        children: nullable({ type: "integer", description: "Travelers aged 2 to 11." }),
+        infants: nullable({ type: "integer", description: "Lap infants under 2." }),
         cabin: nEnum(["economy", "premium_economy", "business", "first"]),
         budget_amount: nullable({ type: "number", description: "Flight budget the user stated. 0 means no budget." }),
         budget_basis: { ...nEnum(["total", "per_person"]), description: "Whether the budget is for everyone or per traveler." },
         nonstop_only: nullable({ type: "boolean" }),
         carry_on_only: nullable({ type: "boolean" }),
         departure_time: nEnum(["morning", "afternoon", "evening", "any"]),
-        priority: nEnum(["cheapest", "fastest", "balanced"]),
+        priority: { ...nEnum(["cheapest", "fastest", "balanced"]), description: "cheapest when the user asks for the cheapest or lowest price, fastest for the quickest or shortest; record it even if nothing else is known yet." },
         rooms: nullable({ type: "integer" }),
         stay_type: nEnum(["hotel", "apartment"]),
         stay_budget_per_night: nullable({ type: "number", description: "0 means no nightly budget." }),
@@ -96,7 +115,7 @@ export const TOOLS = [
         },
       },
       required: [
-        "origin_code", "destination_code", "depart_date", "return_date", "trip_length_days", "trip_type", "flexible_dates", "adults", "children",
+        "origin_code", "destination_code", "origin_query", "destination_query", "depart_date", "return_date", "trip_length_days", "calendar_month", "trip_type", "legs", "flexible_dates", "adults", "children", "infants",
         "cabin", "budget_amount", "budget_basis", "nonstop_only", "carry_on_only", "departure_time", "priority", "rooms", "stay_type",
         "stay_budget_per_night", "notes", "clear",
       ],
@@ -219,28 +238,27 @@ function realDate(s: string) {
   return back === s;
 }
 
+const MISSING_LABEL = { destination: "destination", origin: "departure airport", departDate: "departure date", returnDate: "return date (or one way)", legs: "each flight's airports and date" } as const;
+
+/** What the workflow still needs before a flight search, in the order the user is asked. */
 export function missingForFlights(t: TripPreferences): string[] {
-  const m: string[] = [];
-  if (!t.originCode) m.push("departure city");
-  if (!t.destinationCode) m.push("destination");
-  if (!t.departDate) m.push("departure date");
-  if (t.tripType !== "oneway" && !t.returnDate) m.push("return date or trip length (or say it's one-way)");
-  if (!t.adults) m.push("number of travelers");
-  return m;
+  return missingFields(t).map((f) => MISSING_LABEL[f]);
 }
 
-export function describeTrip(t: TripPreferences) {
+export function describeTrip(t: TripPreferences, hasResults = false) {
   return {
-    origin: t.originCode ? airportLabel(t.originCode) : null,
-    destination: t.destinationCode ? airportLabel(t.destinationCode) : null,
-    trip_type: t.tripType === "oneway" ? "one-way" : t.returnDate ? "round trip" : null,
+    origin: t.originCode ? airportLabel(t.originCode) : t.originQuery ? `not chosen yet (user said "${t.originQuery}")` : null,
+    destination: t.destinationCode ? airportLabel(t.destinationCode) : t.destinationQuery ? `not chosen yet (user said "${t.destinationQuery}")` : null,
+    trip_type: t.tripType === "oneway" ? "one-way" : t.tripType === "multi" ? "multi-city" : t.tripType === "round" || t.returnDate ? "round trip" : "round trip (default)",
+    legs: t.tripType === "multi" ? (t.legs ?? []).map((l) => `${l.from ?? "?"} → ${l.to ?? "?"} on ${l.date ?? "?"}`) : null,
     depart_date: t.departDate ?? null,
     return_date: t.returnDate ?? null,
     trip_length_days: t.departDate && t.returnDate ? daysBetween(t.departDate, t.returnDate) : (t.durationDays ?? null),
     flexible_dates: t.flexibleDates ?? null,
-    adults: t.adults ?? null,
-    children: t.children ?? null,
-    cabin: t.cabin ?? null,
+    adults: t.adults ?? "1 (default)",
+    children: t.children ?? 0,
+    infants: t.infants ?? 0,
+    cabin: t.cabin ?? "economy (default)",
     flight_budget_total: t.budget ? `${t.budget} ${t.currency}` : t.budget === 0 ? "no budget" : null,
     budget_per_person: t.budgetPerPerson ?? null,
     nonstop_only: t.nonstopOnly ?? null,
@@ -253,6 +271,7 @@ export function describeTrip(t: TripPreferences) {
     notes: t.notes ?? null,
     currency: t.currency,
     still_needed_for_flight_search: missingForFlights(t),
+    next_action: nextActionSpec(t, hasResults),
   };
 }
 
@@ -294,10 +313,26 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
   };
   const origin = airport(a.origin_code, "departure city");
   const destination = airport(a.destination_code, "destination");
-  if (origin) set("originCode", origin);
+  if (origin) {
+    set("originCode", origin);
+    t.originQuery = undefined;
+  }
   if (destination) {
     if (destination === t.originCode) issues.push("The destination is the same as the departure city. Ask which one the user meant.");
-    else set("destinationCode", destination);
+    else {
+      set("destinationCode", destination);
+      t.destinationQuery = undefined;
+    }
+  }
+  // A place that isn't one airport yet: the app shows an airport picker for it instead of guessing.
+  const place = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 60) : undefined);
+  if (!origin && place(a.origin_query)) {
+    t.originCode = undefined;
+    set("originQuery", place(a.origin_query));
+  }
+  if (!destination && place(a.destination_query)) {
+    t.destinationCode = undefined;
+    set("destinationQuery", place(a.destination_query));
   }
 
   if (a.trip_type === "one_way") {
@@ -305,6 +340,23 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
     t.returnDate = undefined;
     t.durationDays = undefined;
   } else if (a.trip_type === "round_trip") set("tripType", "round");
+  else if (a.trip_type === "multi_city") Object.assign(t, setTripKind(t, "multi")), changed.push("tripType");
+  if (Array.isArray(a.legs) && a.legs.length) {
+    const legs = (a.legs as { from_code?: unknown; to_code?: unknown; date?: unknown }[]).slice(0, MAX_LEGS).map((l, i) => {
+      const from = l.from_code == null ? undefined : airport(l.from_code, `departure of flight ${i + 1}`);
+      const to = l.to_code == null ? undefined : airport(l.to_code, `destination of flight ${i + 1}`);
+      let date = isDate(l.date) && realDate(l.date) ? l.date : undefined;
+      if (date && departProblem(date, today)) {
+        issues.push(`Flight ${i + 1}: ${departProblem(date, today)}`);
+        date = undefined;
+      }
+      return { from, to, date };
+    });
+    while (legs.length < 2) legs.push({ from: legs.at(-1)?.to, to: undefined, date: undefined });
+    Object.assign(t, { tripType: "multi", legs });
+    changed.push("legs");
+  }
+  if (typeof a.calendar_month === "string" && /^\d{4}-\d{2}$/.test(a.calendar_month) && a.calendar_month >= today.slice(0, 7)) set("calendarMonth", a.calendar_month);
 
   const prevLength = prev.departDate && prev.returnDate ? daysBetween(prev.departDate, prev.returnDate) : prev.durationDays;
   if (a.depart_date != null) {
@@ -321,7 +373,7 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
   }
   if (a.return_date != null) {
     if (!isDate(a.return_date) || !realDate(a.return_date)) issues.push(`"${a.return_date}" is not a valid return date.`);
-    else if (t.departDate && a.return_date <= t.departDate) issues.push(`The return date ${a.return_date} is not after the departure date ${t.departDate}. Ask the user to clarify.`);
+    else if (t.departDate && a.return_date < t.departDate) issues.push(`The return date ${a.return_date} is before the departure date ${t.departDate}. Ask the user to clarify.`);
     else if (a.return_date > addDays(today, MAX_AHEAD_DAYS + 60)) issues.push(`The return date ${a.return_date} is too far ahead.`);
     else {
       set("returnDate", a.return_date);
@@ -346,7 +398,20 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
   const kids = int(a.children, 0, 8);
   if (a.children != null && kids === undefined) issues.push("Children must be between 0 and 8.");
   if (kids !== undefined) set("children", kids);
-  if (typeof a.cabin === "string") set("cabin", a.cabin as TripPreferences["cabin"]);
+  const babies = int(a.infants, 0, 8);
+  if (babies !== undefined) set("infants", babies || undefined);
+  if (adults !== undefined || kids !== undefined || babies !== undefined) {
+    const problem = travelersProblem(travelersOf(t));
+    if (problem) {
+      issues.push(`${problem} Ask the user to adjust the travelers.`);
+      Object.assign(t, { adults: prev.adults, children: prev.children, infants: prev.infants });
+    } else t.confirmed = { ...t.confirmed, travelers: true };
+  }
+  if (typeof a.cabin === "string") {
+    set("cabin", a.cabin as TripPreferences["cabin"]);
+    t.confirmed = { ...t.confirmed, cabin: true };
+  }
+  if (typeof a.trip_type === "string") t.confirmed = { ...t.confirmed, tripType: true };
 
   if (a.budget_amount != null) {
     const amount = num(a.budget_amount, 0, 200000);
@@ -375,18 +440,6 @@ export function applyTripUpdate(prev: TripPreferences, a: TripArgs, today: strin
 }
 
 /* ---------------- Searches and offers ---------------- */
-
-export function flightParams(t: TripPreferences): FlightSearchParams {
-  return {
-    originCode: t.originCode!,
-    destinationCode: t.destinationCode!,
-    departDate: t.departDate!,
-    returnDate: t.tripType === "oneway" ? undefined : t.returnDate,
-    adults: t.adults ?? 1,
-    children: t.children ?? 0,
-    currency: t.currency,
-  };
-}
 
 const totalMin = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
 const isNonstop = (o: FlightOffer) => o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0);
@@ -421,6 +474,31 @@ function searchFailure(err: unknown) {
   return { ok: false, error: code, message: PROVIDER_MESSAGES[code as keyof typeof PROVIDER_MESSAGES] ?? PROVIDER_MESSAGES.unavailable, guidance: guidance[code] ?? guidance.unavailable, flights_found: 0 };
 }
 
+/** Multi-city: each flight is searched on its own (one-way), shown as its own set of cards, and booked separately. */
+async function searchLegs(plan: FlightSearchParams[], s: TurnState) {
+  s.searched = "flights";
+  s.attachments = s.attachments.filter((x) => x.type !== "flights");
+  const legs = [];
+  for (const [index, params] of plan.entries()) {
+    try {
+      const snap = await searchFlights(params);
+      s.attachments.push({ type: "flights", params, snapshot: snap, leg: { index, count: plan.length }, filters: { sort: "price" } });
+      if (index === 0) s.flights = { params, source: snap.source, fetchedAt: snap.fetchedAt, shown: snap.offers.map((o, i) => flightBrief(o, i + 1)) };
+      const cheapest = snap.offers[0];
+      legs.push({ flight: index + 1, route: `${cityName(params.originCode)} → ${cityName(params.destinationCode)}`, date: params.departDate, found: snap.offers.length, cheapest: cheapest ? `${cheapest.totalPrice} ${cheapest.currency} with ${cheapest.airline.name}` : null });
+    } catch (err) {
+      legs.push({ flight: index + 1, route: `${cityName(params.originCode)} → ${cityName(params.destinationCode)}`, date: params.departDate, error: searchFailure(err).message });
+    }
+  }
+  return {
+    ok: true,
+    multi_city: true,
+    data_source: "Live one-way fares from Google Flights for each flight of the route, retrieved just now. Each flight is a separate ticket, booked on its own with its seller; say so briefly.",
+    shown_to_user: "Each flight's options are shown as their own set of cards under your reply. Mention the cheapest option per flight.",
+    legs,
+  };
+}
+
 /* ---------------- Executor ---------------- */
 
 export async function runTool(name: string, rawArgs: string, s: TurnState): Promise<Record<string, unknown>> {
@@ -438,16 +516,20 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
     case "update_trip": {
       const r = applyTripUpdate(s.trip, a as TripArgs, s.today);
       s.trip = r.trip;
-      return { ok: r.issues.length === 0, changed: r.changed, issues: r.issues, trip: describeTrip(s.trip) };
+      return { ok: r.issues.length === 0, changed: r.changed, issues: r.issues, trip: describeTrip(s.trip, false) };
     }
 
     case "search_flights": {
       const missing = missingForFlights(s.trip);
-      if (missing.length) return { ok: false, error: "missing_details", missing, hint: "Ask the user for the missing details (one short question)." };
+      if (missing.length) return { ok: false, error: "missing_details", missing, next_action: nextActionSpec(s.trip, false), hint: "Don't search yet. Ask only for the next missing detail; the app shows the control for it." };
+      const problems = searchProblems(s.trip, s.today);
+      if (problems.length) return { ok: false, error: "invalid_trip", problems, hint: "Explain the problem in one sentence and ask the user to fix it." };
       const wantNonstop = (a.nonstop_only as boolean | null) ?? s.trip.nonstopOnly ?? false;
       const carryOn = (a.carry_on_only as boolean | null) ?? s.trip.carryOnOnly ?? false;
       const sort = (a.sort as "price" | "duration" | "depart" | null) ?? (s.trip.priority === "fastest" ? "duration" : "price");
-      const params = flightParams(s.trip);
+      const plan = searchPlan(s.trip, s.today);
+      if (plan.length > 1) return searchLegs(plan, s);
+      const params = plan[0];
       let snap;
       try {
         snap = await searchFlights(params);
@@ -490,7 +572,8 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
         shown_to_user: "The offers are displayed as interactive cards under your reply. Don't list every flight; highlight two or three.",
         route: `${cityName(params.originCode)} → ${cityName(params.destinationCode)}`,
         dates: round ? `${params.departDate} to ${params.returnDate}` : `${params.departDate}, one-way`,
-        travelers: `${params.adults} adult(s)${params.children ? `, ${params.children} child(ren)` : ""}`,
+        travelers: `${params.adults} adult(s)${params.children ? `, ${params.children} child(ren)` : ""}${params.infants ? `, ${params.infants} lap infant(s)` : ""}`,
+        cabin: CABIN_LABEL[params.cabin ?? "economy"],
         pricing: round
           ? snap.source === "live" && offers.some((o) => o.returnPending)
             ? "Prices are round-trip totals for all travelers, with the cheapest return flight for each outbound flight. Book adds that return and opens the cheapest seller's page."

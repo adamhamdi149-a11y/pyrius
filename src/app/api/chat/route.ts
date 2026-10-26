@@ -61,7 +61,15 @@ function cleanTrip(p: unknown): TripPreferences {
     stayType: oneOf(t.stayType, ["hotel", "apartment"] as const),
     stayBudgetPerNight: numIn(t.stayBudgetPerNight, 0, 20000),
     carMode: oneOf(t.carMode, ["rental", "agencies", "dealerships"] as const),
-    tripType: oneOf(t.tripType, ["round", "oneway"] as const),
+    infants: intIn(t.infants, 0, 8),
+    tripType: oneOf(t.tripType, ["round", "oneway", "multi"] as const),
+    legs: Array.isArray(t.legs)
+      ? (t.legs as Record<string, unknown>[]).slice(0, 5).map((l) => ({ from: code(l?.from), to: code(l?.to), date: isDate(l?.date) ? (l.date as string) : undefined }))
+      : undefined,
+    originQuery: typeof t.originQuery === "string" ? t.originQuery.slice(0, 60) : undefined,
+    destinationQuery: typeof t.destinationQuery === "string" ? t.destinationQuery.slice(0, 60) : undefined,
+    calendarMonth: typeof t.calendarMonth === "string" && /^\d{4}-\d{2}$/.test(t.calendarMonth) ? t.calendarMonth : undefined,
+    confirmed: t.confirmed && typeof t.confirmed === "object" ? { tripType: bool((t.confirmed as Record<string, unknown>).tripType), travelers: bool((t.confirmed as Record<string, unknown>).travelers), cabin: bool((t.confirmed as Record<string, unknown>).cabin) } : undefined,
     cabin: oneOf(t.cabin, ["economy", "premium_economy", "business", "first"] as const),
     departureTime: oneOf(t.departureTime, ["morning", "afternoon", "evening"] as const),
     notes: typeof t.notes === "string" ? t.notes.slice(0, 200) : undefined,
