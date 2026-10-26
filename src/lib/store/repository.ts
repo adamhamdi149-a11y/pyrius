@@ -20,7 +20,7 @@ export interface Repository {
   removeSaved(id: string): Promise<void>;
   putTracker(t: PriceTracker): Promise<void>;
   removeTracker(id: string): Promise<void>;
-  /** Cloud only: trackers as stored now, including prices the scheduled checks recorded. */
+  /** Cloud only: trackers as stored now, including prices checked on other devices. */
   loadTrackers?(): Promise<PriceTracker[]>;
   putSettings(s: UserSettings): Promise<void>;
   /** Demo-only: local plan preview. Cloud plans change only through the Stripe webhook. */

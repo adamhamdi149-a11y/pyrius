@@ -559,15 +559,12 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       s.actions = s.actions.filter((x) => x.offerId !== id);
       s.actions.push({ type: "track", offerId: id, kind, targetPrice: target });
       if (!already) s.counts.trackers += 1;
-      const plan = planById(s.plan);
       return {
         ok: true,
         status: already ? "target_updated" : "tracking_started",
         current_price: price,
         target_price: target,
-        note: `The offer is saved with its target in Price tracking. Pyrius re-checks the live price automatically every 6 hours, even when the app is closed, and records each price.${
-          plan.id === "free" ? " Email alerts when the price reaches the target come with Plus and Pro." : " The user gets an email when the price reaches the target (if email alerts are on in Settings)."
-        } Never predict that the price will drop.`,
+        note: `The offer is saved with its target in Price tracking. The user taps Run check there whenever they want today's real price; there are no automatic checks or email alerts. Never predict that the price will drop.`,
       };
     }
 

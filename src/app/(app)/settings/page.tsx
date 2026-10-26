@@ -256,7 +256,7 @@ function Notifications() {
         <Row label="Email notifications" hint="Master switch for all emails.">
           <Switch checked={n.email} onChange={(v) => set("email", v)} label="Email notifications" />
         </Row>
-        <Row label="Price alerts" hint="An email when a tracked price reaches your target (Plus and Pro). Prices are checked every 6 hours.">
+        <Row label="Price alerts" hint="When a tracked price reaches your target after you run a check.">
           <Switch checked={n.priceAlerts} onChange={(v) => set("priceAlerts", v)} label="Price alerts" />
         </Row>
         <Row label="Saved-search updates" hint="A digest when new options appear for a saved trip.">

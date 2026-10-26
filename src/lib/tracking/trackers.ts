@@ -3,9 +3,6 @@ import { airportByCode } from "@/lib/data/catalog";
 import type { AnyOffer, PricePoint, PriceTracker } from "@/lib/types";
 import { formatRange } from "@/lib/utils";
 
-/** Each tracked price is checked again this often, by the scheduled job or the "Check now" button. */
-export const CHECK_EVERY_HOURS = 6;
-
 /** A sensible default target: ~8% under the current price. */
 export const suggestedTarget = (price: number) => Math.round((price * 0.92) / 5) * 5;
 
@@ -60,7 +57,7 @@ export function trackerFromOffer(o: AnyOffer, targetPrice: number, now = new Dat
 /** The result of looking the offer up again: its current price, or that it's no longer sold. */
 export type CheckResult = { available: true; price: number; at: string } | { available: false; at: string };
 
-/** Records one real price check on a tracker. Pure, so the scheduled job and the app apply it the same way. */
+/** Records one real price check (the user's "Run check") on a tracker. */
 export function applyCheck(t: PriceTracker, r: CheckResult): PriceTracker {
   if (!r.available) return { ...t, lastCheckedAt: r.at, status: t.status === "paused" ? "paused" : "unavailable" };
   const point: PricePoint = { at: r.at, price: r.price, simulated: false };
@@ -72,10 +69,3 @@ export function applyCheck(t: PriceTracker, r: CheckResult): PriceTracker {
     status: t.status === "paused" ? "paused" : r.price <= t.targetPrice ? "target-reached" : "active",
   };
 }
-
-/** Whether a tracker is due for its next automatic check. */
-export const isDue = (t: PriceTracker, now = Date.now()) =>
-  t.status !== "paused" && t.source === "live" && now - new Date(t.lastCheckedAt).getTime() >= (CHECK_EVERY_HOURS * 60 - 10) * 60_000 && !travelStarted(t, now);
-
-/** No point checking a price once the trip has begun. */
-export const travelStarted = (t: PriceTracker, now = Date.now()) => new Date(`${t.travelDates.start}T00:00:00Z`).getTime() < now - 86_400_000;

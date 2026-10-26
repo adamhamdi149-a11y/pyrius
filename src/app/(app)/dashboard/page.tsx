@@ -28,14 +28,14 @@ export default function DashboardPage() {
   const list = saved.filter((s) => tab === "all" || s.kind === tab).slice(0, 5);
   const isEmpty = ready && !saved.length && !trackers.length && !trips.length;
 
-  // Prices recorded by the scheduled checks since the last visit.
+  // Prices checked on another device since the last visit.
   useEffect(() => {
     if (ready) refreshTrackers();
   }, [ready, refreshTrackers]);
 
   const metrics = [
     { label: t("dash.savedFlights"), value: saved.filter((s) => s.kind === "flight").length, icon: Plane, href: "/saved?tab=flight", sub: "Ready to compare" },
-    { label: t("dash.tracked"), value: trackers.length, icon: Bell, href: "/tracking", sub: atTarget ? `${atTarget} at or below target` : trackers.length ? "Checked every 6 hours" : "Nothing tracked yet", accent: atTarget > 0 },
+    { label: t("dash.tracked"), value: trackers.length, icon: Bell, href: "/tracking", sub: atTarget ? `${atTarget} at or below target` : trackers.length ? "Run a check any time" : "Nothing tracked yet", accent: atTarget > 0 },
     { label: t("dash.savedStays"), value: saved.filter((s) => s.kind === "hotel").length, icon: BedDouble, href: "/saved?tab=hotel", sub: "Hotels & apartments" },
     { label: t("dash.upcoming"), value: upcoming.length, icon: CalendarClock, href: "/trips", sub: upcoming[0] ? `Next: ${upcoming[0].dest}` : "Nothing planned yet" },
   ];
@@ -107,7 +107,7 @@ export default function DashboardPage() {
                   <b>
                     <i>3</i>Watch the price
                   </b>
-                  Set a target. Pyrius checks the price every 6 hours, even when the app is closed.
+                  Set a target, then run a check whenever you want today's real price.
                 </li>
               </ul>
               <Link href="/app" className="btn btn--primary" style={{ marginTop: 18 }} onClick={() => store.setActiveId(null)}>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
                   {trackers.length ? (
                     trackers.slice(0, 4).map((tr) => <TrackerRow key={tr.id} t={tr} />)
                   ) : (
-                    <EmptyState icon={<LineChart />} title="No prices tracked yet" body="Use “Track price” on a flight or a stay. Pyrius checks it every 6 hours and records its history." />
+                    <EmptyState icon={<LineChart />} title="No prices tracked yet" body="Use “Track price” on a flight or a stay. Run a check any time to record today's real price." />
                   )}
                 </div>
               </section>

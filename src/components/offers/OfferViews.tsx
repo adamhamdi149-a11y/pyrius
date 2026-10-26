@@ -193,7 +193,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
           const r = store.startTracking(o, target, item.conversationId);
           setTrack(false);
           if (!r.ok) toast({ tone: "info", title: "Plan limit reached", description: r.message });
-          else toast({ title: tracker ? "Target updated" : "Tracking started", description: tracker ? undefined : "Pyrius checks the price every 6 hours, even when the app is closed." });
+          else toast({ title: tracker ? "Target updated" : "Tracking started", description: tracker ? undefined : "Tap “Run check” on the Price tracking page to see today's price." });
         }}
       />
     </div>
@@ -280,7 +280,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
           </div>
         </div>
         <div className="t-meta">
-          {`Checked ${timeAgo(t.lastCheckedAt, loc)} · ${t.history.length} price${t.history.length === 1 ? "" : "s"} recorded. Pyrius re-checks it every 6 hours, even when the app is closed.`}
+          {`Checked ${timeAgo(t.lastCheckedAt, loc)} · ${t.history.length} price${t.history.length === 1 ? "" : "s"} recorded. Run a check to look this exact offer up again with Google.`}
         </div>
         <div className="tcard__actions">
           <button className="btn btn--secondary btn--sm" onClick={() => setEdit(true)}>
@@ -298,7 +298,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
           </button>
           <button className="btn btn--ghost btn--sm" onClick={checkNow} disabled={t.status === "paused" || checking || t.source !== "live"}>
             <RefreshCw className={checking ? "spin" : undefined} />
-            {checking ? "Checking…" : "Check now"}
+            {checking ? "Checking…" : "Run check"}
           </button>
           <button
             className="btn btn--ghost btn--sm"

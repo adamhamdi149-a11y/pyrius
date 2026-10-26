@@ -287,7 +287,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (list) setTrackers(list.filter((t) => t.source !== "demo"));
   }, []);
 
-  // Prices recorded by the scheduled checks while the app was closed show up when it's back in view.
+  // Prices checked on another device show up when the app is back in view.
   useEffect(() => {
     if (auth.mode !== "cloud") return;
     const on = () => document.visibilityState === "visible" && refreshTrackers();

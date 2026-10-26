@@ -2,7 +2,7 @@
 import { BellRing, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { CHECK_EVERY_HOURS, suggestedTarget } from "@/lib/tracking/trackers";
+import { suggestedTarget } from "@/lib/tracking/trackers";
 import type { AnyOffer, Currency } from "@/lib/types";
 import { money } from "@/lib/utils";
 
@@ -101,8 +101,8 @@ export function TrackDialog({ open, onClose, title, subtitle, currentPrice, curr
         <div className="notice">
           <Clock />
           <span>
-            <b style={{ color: "var(--text)", fontWeight: 560 }}>Checked every {CHECK_EVERY_HOURS} hours.</b> Pyrius looks this exact offer up again with Google, even when the app is
-            closed, and records each real price. With Plus or Pro you also get an email when it reaches your target.
+            <b style={{ color: "var(--text)", fontWeight: 560 }}>Checked when you ask.</b> Tap “Run check” on the Price tracking page and Pyrius looks this exact offer up
+            again with Google and records the real price.
           </span>
         </div>
       </div>

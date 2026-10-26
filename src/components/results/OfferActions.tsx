@@ -134,7 +134,7 @@ export function OfferActions({
           toast({
             tone: "success",
             title: tracker ? "Target updated" : "Tracking this price",
-            description: `Target ${money(target, offer.offer.currency, loc)}. Pyrius checks the price every 6 hours, even when the app is closed.`,
+            description: `Target ${money(target, offer.offer.currency, loc)}. Tap “Run check” on the Price tracking page to see today's price.`,
             action: { label: "Open", onClick: () => router.push("/tracking") },
           });
           if (!wasSaved) onSaved?.(offer.kind);
