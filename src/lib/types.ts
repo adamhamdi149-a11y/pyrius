@@ -112,6 +112,8 @@ export interface FlightOffer {
   tripType?: "round" | "oneway";
   /** Round-trip price whose return flight is chosen in the booking step. */
   returnPending?: boolean;
+  /** City names for the route, set by the server so the app doesn't need the world airport table to label it. */
+  places?: { from: string; to: string };
   booking?: FlightBookingRef;
   /** When the provider returned this offer, and when it should be treated as stale. */
   fetchedAt?: string;
@@ -147,14 +149,22 @@ export interface HotelOffer {
   provider: string;
   name: string;
   type: "Hotel" | "Boutique hotel" | "Apartment" | "Resort" | "Guesthouse";
-  neighborhood: string;
+  /** Area of the city, when the provider gives one. */
+  neighborhood?: string;
   city: string;
-  distanceKm: number;
+  distanceKm?: number;
   stars: number;
-  rating?: number; // demo-labeled rating; omitted when a provider has none
+  /** Guest rating: out of 5 from Google (live), out of 10 on the website's illustrations. */
+  rating?: number;
+  ratingScale?: 5 | 10;
+  reviews?: number;
   description: string;
   amenities: string[];
   image: string;
+  images?: string[];
+  address?: string;
+  /** The property's own website. */
+  link?: string;
   pricePerNight: number;
   totalPrice: number;
   nights: number;
@@ -162,10 +172,22 @@ export interface HotelOffer {
   checkOut: string;
   guests: number;
   currency: Currency;
-  freeCancellation: boolean;
-  breakfastIncluded: boolean;
+  freeCancellation?: boolean;
+  breakfastIncluded?: boolean;
+  /** Live offers: the provider's property id and the search, to find sellers and re-check the price. */
+  propertyToken?: string;
+  params?: HotelSearchParams;
+  fetchedAt?: string;
   bookingUrl?: string;
   searchUrl: string;
+}
+
+/** One completed hotel search, stored with the reply so the cards show exactly what was found. */
+export interface HotelSnapshot {
+  offers: HotelOffer[];
+  source: DataSource;
+  provider: string;
+  fetchedAt: string;
 }
 
 export interface CarSearchParams {
@@ -198,25 +220,38 @@ export interface CarOffer {
   searchUrl: string;
 }
 
+export type BusinessCategory = "Car rental agency" | "Car dealership" | "Private jet charter" | "Yacht charter";
+
+/** A real business as listed on Google Maps. Pyrius has no partnership with any of them. */
 export interface LocalBusiness {
   id: string;
   name: string;
-  category: "Car rental agency" | "Car dealership";
+  category: BusinessCategory;
+  /** What the business calls itself on Google Maps, e.g. "Yacht broker". */
+  type?: string;
   address: string;
   phone?: string;
   website?: string;
+  rating?: number;
+  reviews?: number;
+  hours?: string;
+  image?: string;
   distanceKm?: number;
   mapUrl?: string;
-  verified: true; // only verified records are ever rendered as businesses
+  verified: true; // only records from a real directory are ever rendered as businesses
 }
 
 export interface LocalBusinessResult {
   source: DataSource;
+  provider?: string;
+  fetchedAt?: string;
   businesses: LocalBusiness[];
   /** Honest fallback: a general map search the user can run themselves. */
   mapSearchUrl: string;
   city: string;
-  category: LocalBusiness["category"];
+  category: BusinessCategory;
+  /** True when nothing was found close by and the list shows the nearest ones further away. */
+  widened?: boolean;
 }
 
 export type AnyOffer =
@@ -251,6 +286,8 @@ export interface PriceTracker {
   history: PricePoint[];
   source: DataSource;
   createdAt: string;
+  /** Last price an email alert was sent for, so the same drop isn't announced twice. */
+  alertedPrice?: number;
 }
 
 export interface SavedOffer {
@@ -266,6 +303,7 @@ export type ChipAction =
   | { type: "hotels"; stayType: "hotel" | "apartment" }
   | { type: "skip-hotels" }
   | { type: "cars"; mode: "rental" | "agencies" | "dealerships" }
+  | { type: "charter"; mode: "jets" | "yachts" }
   | { type: "skip-cars" }
   | { type: "navigate"; href: string };
 
@@ -283,9 +321,11 @@ export type Attachment =
       filters?: { nonstopOnly?: boolean; carryOnOnly?: boolean; sort?: "price" | "duration" | "depart" };
       snapshot?: FlightSnapshot;
     }
-  | { type: "hotels"; params: HotelSearchParams; budgetPerNight?: number }
+  | { type: "hotels"; params: HotelSearchParams; budgetPerNight?: number; sort?: "luxury"; snapshot?: HotelSnapshot }
+  /** Older conversations: rental-car estimates, now shown as the local rental agencies. */
   | { type: "cars"; params: CarSearchParams }
-  | { type: "businesses"; destinationCode: string; category: LocalBusiness["category"] };
+  /** `destinationCode` is the airport the search is centred on (the departure airport for private jets). */
+  | { type: "businesses"; destinationCode: string; category: BusinessCategory; snapshot?: LocalBusinessResult };
 
 export interface ChatMessage {
   id: string;

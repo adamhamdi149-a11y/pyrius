@@ -1,9 +1,10 @@
 "use client";
 import { ArrowRight, BedDouble, Bell, CalendarClock, LineChart, Plane, Plus } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LiveOrb } from "@/components/ai/LiveOrb";
 import { OfferDetailDialog, SavedRow, TrackerRow } from "@/components/offers/OfferViews";
+import { Services } from "@/components/offers/Services";
 import { summarizeTrips, TripRow, TripSpotlight } from "@/components/offers/TripViews";
 import { EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store/AppStore";
@@ -17,7 +18,7 @@ function greeting(locale: string, name: string) {
 
 export default function DashboardPage() {
   const store = useStore();
-  const { t, settings, saved, trackers, conversations, ready } = store;
+  const { t, settings, saved, trackers, conversations, ready, refreshTrackers } = store;
   const [tab, setTab] = useState<"all" | OfferKind>("all");
   const [open, setOpen] = useState<SavedOffer | null>(null);
   const trips = useMemo(() => summarizeTrips(conversations, saved, settings.locale), [conversations, saved, settings.locale]);
@@ -27,9 +28,14 @@ export default function DashboardPage() {
   const list = saved.filter((s) => tab === "all" || s.kind === tab).slice(0, 5);
   const isEmpty = ready && !saved.length && !trackers.length && !trips.length;
 
+  // Prices recorded by the scheduled checks since the last visit.
+  useEffect(() => {
+    if (ready) refreshTrackers();
+  }, [ready, refreshTrackers]);
+
   const metrics = [
     { label: t("dash.savedFlights"), value: saved.filter((s) => s.kind === "flight").length, icon: Plane, href: "/saved?tab=flight", sub: "Ready to compare" },
-    { label: t("dash.tracked"), value: trackers.length, icon: Bell, href: "/tracking", sub: atTarget ? `${atTarget} at or below target` : "Simulated checks", accent: atTarget > 0 },
+    { label: t("dash.tracked"), value: trackers.length, icon: Bell, href: "/tracking", sub: atTarget ? `${atTarget} at or below target` : trackers.length ? "Checked every 6 hours" : "Nothing tracked yet", accent: atTarget > 0 },
     { label: t("dash.savedStays"), value: saved.filter((s) => s.kind === "hotel").length, icon: BedDouble, href: "/saved?tab=hotel", sub: "Hotels & apartments" },
     { label: t("dash.upcoming"), value: upcoming.length, icon: CalendarClock, href: "/trips", sub: upcoming[0] ? `Next: ${upcoming[0].dest}` : "Nothing planned yet" },
   ];
@@ -72,6 +78,8 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        <Services />
+
         {isEmpty ? (
           <section className="welcome-panel">
             <div className="panel-orb">
@@ -93,13 +101,13 @@ export default function DashboardPage() {
                   <b>
                     <i>2</i>Save what you like
                   </b>
-                  Keep flights, stays and cars side by side.
+                  Keep flights and stays side by side, and reach the companies you need.
                 </li>
                 <li>
                   <b>
                     <i>3</i>Watch the price
                   </b>
-                  Set a target and follow the (simulated) price history.
+                  Set a target. Pyrius checks the price every 6 hours, even when the app is closed.
                 </li>
               </ul>
               <Link href="/app" className="btn btn--primary" style={{ marginTop: 18 }} onClick={() => store.setActiveId(null)}>
@@ -125,7 +133,7 @@ export default function DashboardPage() {
                   {trackers.length ? (
                     trackers.slice(0, 4).map((tr) => <TrackerRow key={tr.id} t={tr} />)
                   ) : (
-                    <EmptyState icon={<LineChart />} title="No prices tracked yet" body="Use “Track price” on any flight, stay or car to set a target and follow its history." />
+                    <EmptyState icon={<LineChart />} title="No prices tracked yet" body="Use “Track price” on a flight or a stay. Pyrius checks it every 6 hours and records its history." />
                   )}
                 </div>
               </section>
@@ -160,7 +168,6 @@ export default function DashboardPage() {
                       ["all", t("common.all")],
                       ["flight", t("common.flights")],
                       ["hotel", t("common.hotels")],
-                      ["car", t("common.cars")],
                     ] as const
                   ).map(([k, l]) => (
                     <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>

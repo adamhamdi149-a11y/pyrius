@@ -8,7 +8,8 @@ import type { SavedSummary } from "@/lib/ai/concierge/tools";
 import { isAirportCode } from "@/lib/data/world";
 import { PLANS } from "@/lib/plans";
 import { getUserFromRequest } from "@/lib/supabase/server";
-import type { AgentStage, CarSearchParams, ChipAction, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
+import type { HotelBrief } from "@/lib/hotels/brief";
+import type { AgentStage, ChipAction, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
 import { toISODate } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -107,7 +108,7 @@ function cleanFlights(v: unknown): ConciergeRequest["results"]["flights"] {
   };
 }
 
-function cleanHotels(v: unknown): HotelSearchParams | undefined {
+function cleanHotelParams(v: unknown): HotelSearchParams | undefined {
   const h = v as Partial<HotelSearchParams> | undefined;
   if (!h || !code(h.destinationCode) || !isDate(h.checkIn) || !isDate(h.checkOut)) return undefined;
   return {
@@ -121,10 +122,32 @@ function cleanHotels(v: unknown): HotelSearchParams | undefined {
   };
 }
 
-function cleanCars(v: unknown): CarSearchParams | undefined {
-  const c = v as Partial<CarSearchParams> | undefined;
-  if (!c || !code(c.destinationCode) || !isDate(c.pickUp) || !isDate(c.dropOff)) return undefined;
-  return { destinationCode: c.destinationCode!, pickUp: c.pickUp, dropOff: c.dropOff, currency: oneOf(c.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD" };
+/** The stay cards on screen: text and numbers only, bounded, never instructions. */
+function cleanHotels(v: unknown): ConciergeRequest["results"]["hotels"] {
+  const h = v as { params?: unknown; shown?: unknown[] } | undefined;
+  const params = cleanHotelParams(h?.params);
+  if (!params) return undefined;
+  const str = (x: unknown, n = 160) => (typeof x === "string" ? x.slice(0, n) : "");
+  const shown: HotelBrief[] = (Array.isArray(h!.shown) ? h!.shown : []).slice(0, 24).flatMap((raw, i) => {
+    const b = raw as Record<string, unknown>;
+    if (!b || typeof b.id !== "string" || !/^[\w-]{3,80}$/.test(b.id)) return [];
+    return [{
+      n: i + 1,
+      id: b.id,
+      name: str(b.name, 120),
+      type: str(b.type, 30),
+      stars: intIn(b.stars, 0, 5) ?? 0,
+      rating: numIn(b.rating, 0, 10) ?? null,
+      reviews: intIn(b.reviews, 0, 10_000_000) ?? null,
+      per_night: numIn(b.per_night, 0, 1_000_000) ?? 0,
+      total: numIn(b.total, 0, 10_000_000) ?? 0,
+      nights: intIn(b.nights, 1, 400) ?? 1,
+      currency: str(b.currency, 3) || "CAD",
+      amenities: (Array.isArray(b.amenities) ? b.amenities : []).slice(0, 6).map((a) => str(a, 40)),
+      address: typeof b.address === "string" ? str(b.address) : null,
+    }];
+  });
+  return { params, shown };
 }
 
 /** Quick-reply buttons with a structured action become a plain request for the AI. */
@@ -138,11 +161,13 @@ function actionText(a: ChipAction, locale: Locale) {
     case "skip-hotels":
       return L("I don't need a place to stay.", "Je n'ai pas besoin d'hébergement.");
     case "cars":
-      return a.mode === "rental"
-        ? L("Show me rental cars for this trip.", "Montre-moi des voitures de location pour ce voyage.")
-        : a.mode === "agencies"
-          ? L("Help me find local car rental agencies.", "Aide-moi à trouver des agences de location locales.")
-          : L("Help me find car dealerships there.", "Aide-moi à trouver des concessionnaires sur place.");
+      return a.mode === "dealerships"
+        ? L("Help me find car dealerships there.", "Aide-moi à trouver des concessionnaires sur place.")
+        : L("Find car rental agencies at my destination.", "Trouve des agences de location de voitures à destination.");
+    case "charter":
+      return a.mode === "jets"
+        ? L("Find private jet charters for this trip.", "Trouve des vols en jet privé pour ce voyage.")
+        : L("Find yacht charters at my destination.", "Trouve des locations de yacht à destination.");
     case "skip-cars":
       return L("I don't need a car. That's everything for now.", "Je n'ai pas besoin de voiture. C'est tout pour le moment.");
     default:
@@ -213,7 +238,7 @@ export async function POST(req: Request) {
       locale,
       homeAirport: code(body.homeAirport),
       today,
-      results: { flights: cleanFlights(body.results?.flights), hotels: cleanHotels(body.results?.hotels), cars: cleanCars(body.results?.cars) },
+      results: { flights: cleanFlights(body.results?.flights), hotels: cleanHotels(body.results?.hotels) },
       saved,
       plan: oneOf(body.plan, PLANS.map((p) => p.id)) ?? "free",
       counts: { saved: intIn(body.counts?.saved, 0, 100000) ?? saved.length, trackers: intIn(body.counts?.trackers, 0, 100000) ?? saved.filter((s) => s.tracked).length },

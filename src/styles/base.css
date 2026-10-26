@@ -1029,3 +1029,22 @@ ul {
     scroll-behavior: auto !important;
   }
 }
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.link {
+  color: var(--accent-hi);
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  text-decoration: underline;
+}

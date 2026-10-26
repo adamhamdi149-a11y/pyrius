@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { TrackDialog } from "@/components/tracking/TrackDialog";
 import { BookingDialog, openBookingTab } from "./BookingDialog";
+import { HotelBookingDialog, openHotelTab } from "./HotelBookingDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
 import type { AnyOffer } from "@/lib/types";
@@ -65,6 +66,7 @@ export function OfferActions({
   // A live flight has a booking path for that exact itinerary. Anything else only gets a route search,
   // and says so: it is never presented as the offer's checkout page.
   const bookable = offer.kind === "flight" && offer.offer.source === "live" && offer.offer.booking ? offer.offer : null;
+  const bookableStay = offer.kind === "hotel" && offer.offer.source === "live" && offer.offer.propertyToken ? offer.offer : null;
   const url = offer.offer.bookingUrl ?? offer.offer.searchUrl;
   const external = offer.offer.bookingUrl ? "View offer" : `Search on ${PROVIDER_NAME[offer.kind]}`;
 
@@ -78,14 +80,14 @@ export function OfferActions({
         {tracker ? <BellRing /> : <Bell />}
         <span>{tracker ? store.t("common.tracking") : store.t("common.track")}</span>
       </button>
-      {bookable ? (
+      {bookable || bookableStay ? (
         <button
           className="btn btn--primary btn--sm offer-actions__out"
           onClick={() => {
-            setBookTab(openBookingTab(bookable));
+            setBookTab(bookable ? openBookingTab(bookable) : openHotelTab(bookableStay!));
             setBookOpen(true);
           }}
-          title="Continue to the seller with the lowest price for this trip"
+          title={bookable ? "Continue to the seller with the lowest price for this trip" : "Continue to the site with the lowest price for these dates"}
         >
           Book
           <ExternalLink />
@@ -103,6 +105,7 @@ export function OfferActions({
         </a>
       )}
       {bookable && <BookingDialog offer={bookable} open={bookOpen} tab={bookTab} onClose={() => setBookOpen(false)} onExpired={onExpired} />}
+      {bookableStay && <HotelBookingDialog offer={bookableStay} open={bookOpen} tab={bookTab} onClose={() => setBookOpen(false)} />}
 
       <TrackDialog
         open={trackOpen}
@@ -130,11 +133,8 @@ export function OfferActions({
           if (!r.ok) return limitToast(r.message);
           toast({
             tone: "success",
-            title: tracker ? "Target updated" : offer.offer.source === "live" ? "Saved with a target price" : "Tracking started (simulated)",
-            description:
-              offer.offer.source === "live"
-                ? `Target ${money(target, offer.offer.currency, loc)}. Search again any time to see the current fare.`
-                : `We'll flag it at ${money(target, offer.offer.currency, loc)} or less.`,
+            title: tracker ? "Target updated" : "Tracking this price",
+            description: `Target ${money(target, offer.offer.currency, loc)}. Pyrius checks the price every 6 hours, even when the app is closed.`,
             action: { label: "Open", onClick: () => router.push("/tracking") },
           });
           if (!wasSaved) onSaved?.(offer.kind);

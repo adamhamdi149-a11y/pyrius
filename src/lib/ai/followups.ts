@@ -18,12 +18,12 @@ export function carsQuestion(locale: Locale, afterSave = false): { text: string;
   const L = (en: string, fr: string) => (locale === "fr" ? fr : en);
   return {
     text: afterSave
-      ? L("Saved. Would you like a car for your trip?", "C'est enregistré. Aurez-vous besoin d'une voiture ?")
-      : L("Would you like a car for your trip?", "Aurez-vous besoin d'une voiture pour ce voyage ?"),
+      ? L("Saved. Would you like a car, or something more special, for your trip?", "C'est enregistré. Aurez-vous besoin d'une voiture, ou de quelque chose de plus exclusif ?")
+      : L("Would you like a car, or something more special, for your trip?", "Aurez-vous besoin d'une voiture, ou de quelque chose de plus exclusif, pour ce voyage ?"),
     chips: [
-      { label: L("Find a rental car", "Louer une voiture"), action: { type: "cars", mode: "rental" } },
-      { label: L("Local rental agencies", "Agences de location locales"), action: { type: "cars", mode: "agencies" } },
+      { label: L("Car rental agencies", "Agences de location"), action: { type: "cars", mode: "agencies" } },
       { label: L("Car dealerships", "Concessionnaires"), action: { type: "cars", mode: "dealerships" } },
+      { label: L("Yacht charters", "Location de yacht"), action: { type: "charter", mode: "yachts" } },
       { label: L("Skip", "Passer"), action: { type: "skip-cars" } },
     ],
   };

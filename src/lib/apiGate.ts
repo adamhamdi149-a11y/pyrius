@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { allow } from "@/lib/ai/concierge/rateLimit";
 import { isAirportCode } from "@/lib/data/world";
 import { getUserFromRequest } from "@/lib/supabase/server";
-import type { FlightSearchParams } from "@/lib/types";
+import type { BusinessCategory, FlightSearchParams, HotelSearchParams } from "@/lib/types";
 
 /**
  * Requests that spend paid quota (AI, live flight searches, booking lookups) need a signed-in
@@ -42,3 +42,21 @@ export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
     nonstopOnly: p.nonstopOnly === true || undefined,
   };
 }
+
+/** Hotel search parameters from the browser, checked field by field. */
+export function cleanHotelParams(v: unknown): HotelSearchParams | undefined {
+  const p = (v && typeof v === "object" ? v : {}) as Partial<HotelSearchParams>;
+  if (!isAirportCode(p.destinationCode) || !isDate(p.checkIn) || !isDate(p.checkOut) || p.checkOut <= p.checkIn) return undefined;
+  return {
+    destinationCode: p.destinationCode,
+    checkIn: p.checkIn,
+    checkOut: p.checkOut,
+    guests: intIn(p.guests, 1, 17) ?? 1,
+    rooms: intIn(p.rooms, 1, 9) ?? 1,
+    currency: p.currency === "USD" || p.currency === "EUR" ? p.currency : "CAD",
+    stayType: p.stayType === "apartment" ? "apartment" : "hotel",
+  };
+}
+
+export const BUSINESS_CATEGORIES: BusinessCategory[] = ["Car rental agency", "Car dealership", "Private jet charter", "Yacht charter"];
+export const isBusinessCategory = (v: unknown): v is BusinessCategory => BUSINESS_CATEGORIES.includes(v as BusinessCategory);

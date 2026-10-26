@@ -269,15 +269,13 @@ export function demoCars(p: { destinationCode: string; pickUp: string; dropOff: 
 export const demoProviders: TravelProviders = {
   flights: { id: "demo", source: "demo", search: async (p) => demoFlights(p) },
   hotels: { id: "demo", source: "demo", search: async (p) => demoHotels(p) },
-  cars: { id: "demo", source: "demo", search: async (p) => demoCars(p) },
   businesses: {
     id: "demo",
     source: "demo",
-    // No verified business directory is connected, so we return none rather than invent any.
+    // No business directory in demo mode, so we return none rather than invent any.
     search: async (code, category) => {
       const city = airportByCode(code)?.city ?? code;
-      const q = category === "Car dealership" ? `car dealerships near ${city}` : `car rental agencies near ${city}`;
-      return { source: "demo", businesses: [], mapSearchUrl: mapSearchUrl(q), city, category };
+      return { source: "demo", businesses: [], mapSearchUrl: mapSearchUrl(`${category} near ${city}`), city, category };
     },
   },
 };

@@ -270,41 +270,23 @@ async function hotelResults(p: TripPreferences, input: AgentInput, L: (en: strin
 
 async function carStep(mode: "rental" | "agencies" | "dealerships", p: TripPreferences, input: AgentInput, L: (en: string, fr: string) => string): Promise<AgentReply> {
   const city = cityName(p.destinationCode, input.locale);
-  if (mode === "rental") {
-    const params = { destinationCode: p.destinationCode!, pickUp: p.departDate!, dropOff: p.returnDate!, currency: p.currency };
-    const offers = await getProviders().cars.search(params);
-    return {
-      reply: L(
-        `Here are ${offers.length} rental options for pick-up at ${city} airport, ${formatRange(params.pickUp, params.dropOff, input.locale)}. Demo prices — the rental company confirms the final price and availability when you book with them.`,
-        `Voici ${offers.length} options de location avec prise en charge à l'aéroport de ${city}, ${formatRange(params.pickUp, params.dropOff, input.locale)}. Prix de démonstration — le loueur confirme le prix final et la disponibilité lors de la réservation.`,
-      ),
-      prefs: { ...p, carMode: mode },
-      stage: "cars",
-      engine: "demo",
-      attachment: { type: "cars", params },
-      chips: [
-        { label: L("Local rental agencies", "Agences de location locales"), action: { type: "cars", mode: "agencies" } },
-        { label: L("Finish planning", "Terminer"), action: { type: "skip-cars" } },
-      ],
-    };
-  }
   const dealer = mode === "dealerships";
   return {
     reply: dealer
       ? L(
-          `Just so we're clear: dealerships sell vehicles — they don't usually rent them. I don't have a verified business directory connected yet, so I won't invent names, phone numbers or addresses. You can search the map for dealerships around ${city} below.`,
-          `Précision : les concessionnaires vendent des véhicules, ils n'en louent généralement pas. Aucun annuaire d'entreprises vérifié n'est encore connecté, je n'inventerai donc ni noms, ni numéros, ni adresses. Vous pouvez chercher des concessionnaires près de ${city} sur la carte ci-dessous.`,
+          `Here are car dealerships around ${city}, from Google Maps. Dealerships sell vehicles; they don't usually rent them. Prices are on each dealer's website.`,
+          `Voici des concessionnaires autour de ${city}, selon Google Maps. Les concessionnaires vendent des véhicules, ils n'en louent généralement pas. Les prix sont sur le site de chacun.`,
         )
       : L(
-          `I don't have a verified local business directory connected yet, so I won't make up agency names or phone numbers. You can search the map for rental agencies around ${city} below.`,
-          `Aucun annuaire local vérifié n'est encore connecté, je n'inventerai donc pas de noms d'agences ni de numéros. Vous pouvez chercher des agences de location près de ${city} sur la carte ci-dessous.`,
+          `Here are car rental agencies around ${city}, from Google Maps. Each one quotes its own prices on its website or by phone.`,
+          `Voici des agences de location autour de ${city}, selon Google Maps. Chacune donne ses prix sur son site ou par téléphone.`,
         ),
     prefs: { ...p, carMode: mode },
     stage: "cars",
     engine: "demo",
     attachment: { type: "businesses", destinationCode: p.destinationCode!, category: dealer ? "Car dealership" : "Car rental agency" },
     chips: [
-      { label: L("Compare rental cars", "Comparer les locations"), action: { type: "cars", mode: "rental" } },
+      { label: dealer ? L("Car rental agencies", "Agences de location") : L("Car dealerships", "Concessionnaires"), action: { type: "cars", mode: dealer ? "agencies" : "dealerships" } },
       { label: L("Finish planning", "Terminer"), action: { type: "skip-cars" } },
     ],
   };

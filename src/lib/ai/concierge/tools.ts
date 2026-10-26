@@ -1,20 +1,19 @@
 import { airportLabel, findAirport, isAirportCode, nearbyAirports, placeName as cityName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
+import { hotelBrief, sortStays, type HotelBrief } from "@/lib/hotels/brief";
 import { planById } from "@/lib/plans";
 import { getProviders } from "@/lib/providers";
 import { PROVIDER_MESSAGES, ProviderError } from "@/lib/providers/errors";
 import { searchFlights } from "@/lib/providers/flightSearch";
-import { suggestedTarget } from "@/lib/tracking/simulator";
+import { searchHotels } from "@/lib/providers/hotelSearch";
+import { suggestedTarget } from "@/lib/tracking/trackers";
 import type {
-  AnyOffer,
   Attachment,
-  CarOffer,
-  CarSearchParams,
+  BusinessCategory,
   ClientAction,
   DataSource,
   FlightOffer,
   FlightSearchParams,
-  HotelOffer,
   HotelSearchParams,
   OfferKind,
   PlanId,
@@ -45,14 +44,14 @@ export interface TurnState {
   locale: "en" | "fr";
   /** The flight results the user is looking at (from the app), replaced by any search in this turn. */
   flights?: { params: FlightSearchParams; source: DataSource; fetchedAt?: string; shown: FlightBrief[] };
-  /** Latest hotel and car result sets (example data, re-run on demand). */
-  results: { hotels?: HotelSearchParams; cars?: CarSearchParams };
+  /** The stay cards the user is looking at, replaced by any hotel search in this turn. */
+  hotels?: { params: HotelSearchParams; shown: HotelBrief[] };
   saved: SavedSummary[];
   plan: PlanId;
   counts: { saved: number; trackers: number };
   attachments: Attachment[];
   actions: ClientAction[];
-  searched?: "flights" | "hotels" | "cars";
+  searched?: "flights" | "hotels";
   toolCalls: number;
 }
 
@@ -171,32 +170,34 @@ export const TOOLS = [
     type: "function",
     name: "search_hotels",
     strict: true,
-    description: "Search places to stay at the destination for the trip dates and show them as cards. Needs destination, check-in and check-out dates.",
+    description:
+      "Search live hotels (or vacation rentals with stay_type apartment) at the destination for the trip dates with Google Hotels, and show them as cards with real prices, ratings and photos. Needs destination, check-in and check-out dates (the trip's dates by default).",
     parameters: {
       type: "object",
       additionalProperties: false,
-      properties: { stay_type: nEnum(["hotel", "apartment"]), rooms: nullable({ type: "integer" }), max_per_night: nullable({ type: "number" }) },
-      required: ["stay_type", "rooms", "max_per_night"],
+      properties: {
+        stay_type: nEnum(["hotel", "apartment"]),
+        rooms: nullable({ type: "integer" }),
+        max_per_night: nullable({ type: "number" }),
+        sort: { ...nEnum(["price", "luxury"]), description: "luxury when the user wants the best, has a large or unlimited budget, or asks for luxury or 5 stars; otherwise price." },
+      },
+      required: ["stay_type", "rooms", "max_per_night", "sort"],
     },
   },
   {
     type: "function",
-    name: "search_rental_cars",
-    strict: true,
-    description: "Search rental cars for pick-up at the destination airport for the trip dates and show them as cards.",
-    parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
-  },
-  {
-    type: "function",
-    name: "find_local_car_businesses",
+    name: "find_local_services",
     strict: true,
     description:
-      "Show a map search for local car rental agencies or car dealerships at the destination. Pyrius has no verified business directory, so never name businesses yourself.",
+      "Find real local businesses on Google Maps and show them as cards with their rating, phone, website and distance: car rental agencies, car dealerships, private jet charter operators or yacht charters. Use it for rental cars, buying a car, private jets and yachts. airport_code is the IATA code of the place to search near; null uses the trip's destination (for private jets, the departure city).",
     parameters: {
       type: "object",
       additionalProperties: false,
-      properties: { category: { type: "string", enum: ["rental_agency", "dealership"] } },
-      required: ["category"],
+      properties: {
+        category: { type: "string", enum: ["rental_agency", "dealership", "private_jet", "yacht"] },
+        airport_code: { type: ["string", "null"], pattern: "^[A-Z]{3}$", description: "IATA code of the airport for the place to search near, or null." },
+      },
+      required: ["category", "airport_code"],
     },
   },
 ] as const;
@@ -387,59 +388,25 @@ export function flightParams(t: TripPreferences): FlightSearchParams {
   };
 }
 
-function hotelSummary(h: HotelOffer, n: number) {
-  return {
-    n,
-    id: h.id,
-    name: h.name,
-    type: h.type,
-    area: `${h.neighborhood}, ${h.distanceKm} km from centre`,
-    stars: h.stars,
-    sample_rating: h.rating ?? null,
-    per_night: `${h.pricePerNight} ${h.currency}`,
-    total: `${h.totalPrice} ${h.currency} for ${h.nights} nights`,
-    free_cancellation: h.freeCancellation,
-    breakfast: h.breakfastIncluded,
-  };
-}
-
-function carSummary(c: CarOffer, n: number) {
-  return {
-    n,
-    id: c.id,
-    category: c.category,
-    example: c.example,
-    supplier: c.supplier,
-    seats: c.seats,
-    bags: c.bags,
-    transmission: c.transmission,
-    total: `${c.totalPrice} ${c.currency} for ${c.days} days`,
-  };
-}
-
 const totalMin = (o: FlightOffer) => o.outbound.durationMin + (o.inbound?.durationMin ?? 0);
 const isNonstop = (o: FlightOffer) => o.outbound.stops === 0 && (!o.inbound || o.inbound.stops === 0);
 
-/** Hotel and car example offers are regenerated from their search; flights only come from what the user was shown. */
-async function findExample(s: TurnState, kind: "hotel" | "car", id: string): Promise<AnyOffer | null> {
-  const p = getProviders();
-  if (kind === "hotel" && s.results.hotels) {
-    const o = (await p.hotels.search(s.results.hotels)).find((x) => x.id === id);
-    return o ? { kind, offer: o } : null;
-  }
-  if (kind === "car" && s.results.cars) {
-    const o = (await p.cars.search(s.results.cars)).find((x) => x.id === id);
-    return o ? { kind, offer: o } : null;
-  }
-  return null;
-}
-
 const shownFlight = (s: TurnState, id: string) => s.flights?.shown.find((f) => f.id === id);
+const shownHotel = (s: TurnState, id: string) => s.hotels?.shown.find((h) => h.id === id);
+
+const BUSINESS: Record<string, BusinessCategory> = {
+  rental_agency: "Car rental agency",
+  dealership: "Car dealership",
+  private_jet: "Private jet charter",
+  yacht: "Yacht charter",
+};
 
 // The cards show the exact retrieval time in the user's own timezone, so the AI just says "just now".
 const LIVE_NOTE = (at: string) =>
   `Live offers from Google Flights, retrieved just now (${at}); don't state a clock time, the cards show it. Prices and seats can change until the user books with the seller. Pyrius doesn't sell tickets; each card's Book button picks the seller with the lowest price for that trip and opens their booking page.`;
 const DEMO_NOTE = "These are Pyrius demo flights (generated examples), not real offers. Say so clearly; never call them real or live.";
+const HOTEL_NOTE =
+  "Live stays from Google Hotels for these dates and guests: real properties, Google guest ratings (out of 5) and current lowest prices, taxes and fees included where reported. Prices can change until booked. Pyrius doesn't sell rooms; each card's Book button opens the site with the lowest price for these dates.";
 
 function searchFailure(err: unknown) {
   const code = err instanceof ProviderError ? err.code : "unavailable";
@@ -551,13 +518,12 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
         if (!found.length) return { ok: false, error: "Those flights aren't in the results the user is looking at. Ask which one they mean, or search again." };
         return { ok: true, data_source: s.flights?.source === "live" ? LIVE_NOTE(s.flights.fetchedAt ?? new Date().toISOString()) : DEMO_NOTE, offers: found };
       }
-      const offers = (await Promise.all(ids.map((id) => findExample(s, kind, id)))).filter((x): x is AnyOffer => Boolean(x));
-      if (!offers.length) return { ok: false, error: "Those offers aren't in the latest results. Search again or ask which option they mean." };
-      return {
-        ok: true,
-        data_source: "Example data, not real listings.",
-        offers: offers.map((o, i) => (o.kind === "hotel" ? { ...hotelSummary(o.offer, i + 1), description: o.offer.description, amenities: o.offer.amenities } : { ...carSummary(o.offer as CarOffer, i + 1), conditions: (o.offer as CarOffer).conditions })),
-      };
+      if (kind === "hotel") {
+        const found = ids.map((id) => shownHotel(s, id)).filter(Boolean);
+        if (!found.length) return { ok: false, error: "Those stays aren't in the results the user is looking at. Ask which one they mean, or search again." };
+        return { ok: true, data_source: HOTEL_NOTE, offers: found };
+      }
+      return { ok: false, error: "Pyrius doesn't show rental car offers with prices; use find_local_services for rental agencies." };
     }
 
     case "save_offer": {
@@ -565,24 +531,24 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       const id = String(a.offer_id ?? "");
       if (s.saved.some((x) => x.id === id)) return { ok: true, status: "already_saved" };
       const flight = kind === "flight" ? shownFlight(s, id) : undefined;
-      const example = kind !== "flight" ? await findExample(s, kind, id) : null;
-      if (!flight && !example) return { ok: false, error: "That offer isn't in the results the user is looking at, so it can't be saved. Ask which one they mean." };
+      const hotel = kind === "hotel" ? shownHotel(s, id) : undefined;
+      if (!flight && !hotel) return { ok: false, error: "That offer isn't in the results the user is looking at, so it can't be saved. Ask which one they mean." };
       const limit = planById(s.plan).limits.saved;
       if (s.counts.saved >= limit) return { ok: false, error: "plan_limit", detail: `The ${planById(s.plan).name} plan holds ${limit} saved offers. They can remove some or upgrade in Settings.` };
       s.actions = s.actions.filter((x) => !(x.type === "save" && x.offerId === id));
-      s.actions.push({ type: "save", offerId: id, kind, offer: example ?? undefined });
+      s.actions.push({ type: "save", offerId: id, kind });
       s.counts.saved += 1;
-      return { ok: true, status: "saved", label: flight ? `${flight.airline} ${flight.out.slice(0, 40)}` : offerLabel(example!) };
+      return { ok: true, status: "saved", label: flight ? `${flight.airline} ${flight.out.slice(0, 40)}` : hotel!.name };
     }
 
     case "track_price": {
       const kind = a.kind as OfferKind;
       const id = String(a.offer_id ?? "");
       const flight = kind === "flight" ? shownFlight(s, id) : undefined;
-      const example = kind !== "flight" ? await findExample(s, kind, id) : null;
+      const hotel = kind === "hotel" ? shownHotel(s, id) : undefined;
       const saved = s.saved.find((x) => x.id === id);
-      if (!flight && !example && !saved) return { ok: false, error: "That offer isn't in the results or saved offers. Ask which one they mean." };
-      const price = flight?.price ?? (example ? example.offer.totalPrice : saved!.price);
+      if (!flight && !hotel && !saved) return { ok: false, error: "That offer isn't in the results or saved offers. Ask which one they mean." };
+      const price = flight?.price ?? hotel?.total ?? saved!.price;
       const requested = num(a.target_price, 1, 1_000_000);
       if (a.target_price != null && requested === undefined) return { ok: false, error: "The target price must be a positive amount." };
       const target = requested ?? suggestedTarget(price);
@@ -591,17 +557,17 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       if (!already && s.counts.trackers >= limit) return { ok: false, error: "plan_limit", detail: `The ${planById(s.plan).name} plan tracks up to ${limit} prices. They can stop one or upgrade in Settings.` };
       // Tracking saves the offer too, so a separate save for it is redundant.
       s.actions = s.actions.filter((x) => x.offerId !== id);
-      s.actions.push({ type: "track", offerId: id, kind, offer: example ?? undefined, targetPrice: target });
+      s.actions.push({ type: "track", offerId: id, kind, targetPrice: target });
       if (!already) s.counts.trackers += 1;
-      const liveFlight = kind === "flight" && s.flights?.source === "live";
+      const plan = planById(s.plan);
       return {
         ok: true,
         status: already ? "target_updated" : "tracking_started",
         current_price: price,
         target_price: target,
-        note: liveFlight
-          ? "The offer is saved with its target in Price tracking. Automatic re-checks of live fares aren't running yet, so don't promise alerts; say they can search again any time to see the current price."
-          : "Price checks for example offers are simulated; say it's tracked in the Price tracking page without promising real fare drops.",
+        note: `The offer is saved with its target in Price tracking. Pyrius re-checks the live price automatically every 6 hours, even when the app is closed, and records each price.${
+          plan.id === "free" ? " Email alerts when the price reaches the target come with Plus and Pro." : " The user gets an email when the price reaches the target (if email alerts are on in Settings)."
+        } Never predict that the price will drop.`,
       };
     }
 
@@ -615,54 +581,69 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       const stayType = (a.stay_type as "hotel" | "apartment" | null) ?? t.stayType ?? "hotel";
       const rooms = int(a.rooms, 1, 9) ?? t.rooms ?? Math.max(1, Math.ceil((t.adults ?? 1) / 2));
       const params: HotelSearchParams = { destinationCode: t.destinationCode!, checkIn: t.departDate!, checkOut: t.returnDate!, guests: Math.max(1, travelers(t)), rooms, currency: t.currency, stayType };
-      const offers = await p.hotels.search(params);
-      const maxNight = num(a.max_per_night, 1, 20000) ?? t.stayBudgetPerNight;
+      const maxNight = num(a.max_per_night, 1, 100000) ?? t.stayBudgetPerNight;
       s.trip = { ...t, rooms, stayType, stayBudgetPerNight: maxNight ?? t.stayBudgetPerNight };
-      s.results.hotels = params;
       s.searched = "hotels";
+      let snap;
+      try {
+        snap = await searchHotels(params);
+      } catch (err) {
+        return { ...searchFailure(err), guidance: "Tell the user the hotel search couldn't be completed and offer to try again. Do not describe or invent any hotels or prices." };
+      }
+      const offers = snap.offers;
+      const luxury = a.sort === "luxury";
+      const shown = sortStays(offers, luxury ? "luxury" : "price").map((h, i) => hotelBrief(h, i + 1));
+      s.hotels = { params, shown };
       s.attachments = s.attachments.filter((x) => x.type !== "hotels");
-      s.attachments.push({ type: "hotels", params, budgetPerNight: maxNight || undefined });
-      const sorted = [...offers].sort((x, y) => x.pricePerNight - y.pricePerNight);
+      s.attachments.push({ type: "hotels", params, budgetPerNight: maxNight || undefined, sort: luxury ? "luxury" : undefined, snapshot: snap });
+      if (!offers.length) {
+        return { ok: true, total_offers: 0, guidance: "Google Hotels returned no stays with prices for these dates here. Say so and suggest other dates or a nearby city. Don't invent hotels." };
+      }
       return {
         ok: true,
-        shown_to_user: "The stays are displayed as cards under your reply. Highlight two or three.",
-        data_source: "Example stays: names, ratings and prices are illustrative, not real listings or availability (no live hotel provider is connected). Say so briefly.",
+        live: snap.source === "live",
+        data_source: snap.source === "live" ? HOTEL_NOTE : "These are Pyrius example stays, not real listings. Say so clearly.",
+        shown_to_user: `The stays are displayed as cards under your reply (${luxury ? "highest class and best rated first" : "cheapest first"}). Don't list them all; highlight two or three by name, rating and price.`,
         nights: daysBetween(params.checkIn, params.checkOut),
-        rooms,
+        guests: params.guests,
+        rooms_note: rooms > 1 ? "Google Hotels prices are for the number of guests, not per room; tell the user to check room count on the site when booking." : null,
         total_offers: offers.length,
         within_nightly_budget: maxNight ? offers.filter((h) => h.pricePerNight <= maxNight).length : null,
-        top: sorted.slice(0, 5).map((h, i) => hotelSummary(h, i + 1)),
+        top: shown.slice(0, 6),
       };
     }
 
-    case "search_rental_cars": {
-      const t = s.trip;
-      const missing = [!t.destinationCode && "destination", !t.departDate && "pick-up date", !t.returnDate && "drop-off date"].filter(Boolean);
-      if (missing.length) return { ok: false, error: "missing_details", missing };
-      const params: CarSearchParams = { destinationCode: t.destinationCode!, pickUp: t.departDate!, dropOff: t.returnDate!, currency: t.currency };
-      const offers = await p.cars.search(params);
-      s.results.cars = params;
-      s.searched = "cars";
-      s.attachments = s.attachments.filter((x) => x.type !== "cars");
-      s.attachments.push({ type: "cars", params });
+    case "find_local_services": {
+      const category = BUSINESS[String(a.category)];
+      if (!category) return { ok: false, error: "Unknown category." };
+      const jets = category === "Private jet charter";
+      const code = isAirportCode(a.airport_code) ? a.airport_code : jets ? (s.trip.originCode ?? s.trip.destinationCode) : (s.trip.destinationCode ?? s.trip.originCode);
+      if (!code) return { ok: false, error: "missing_details", missing: [jets ? "departure city" : "destination"], hint: "Ask where they want to search (one short question)." };
+      let result;
+      try {
+        result = await p.businesses.search(code, category);
+      } catch (err) {
+        return { ...searchFailure(err), guidance: "Tell the user the search for local companies couldn't be completed and offer to try again. Don't name any businesses." };
+      }
+      s.attachments = s.attachments.filter((x) => !(x.type === "businesses" && x.category === category));
+      s.attachments.push({ type: "businesses", destinationCode: code, category, snapshot: result });
+      const where = findAirport(code)?.city ?? code;
       return {
         ok: true,
-        shown_to_user: "The cars are displayed as cards under your reply.",
-        data_source: "Example rental cars with illustrative prices (no live car provider is connected); the rental company sets the real price. Say so briefly.",
-        pick_up: `${cityName(params.destinationCode)} airport, ${params.pickUp} to ${params.dropOff}`,
-        total_offers: offers.length,
-        top: [...offers].sort((x, y) => x.totalPrice - y.totalPrice).slice(0, 5).map((c, i) => carSummary(c, i + 1)),
-      };
-    }
-
-    case "find_local_car_businesses": {
-      if (!s.trip.destinationCode) return { ok: false, error: "missing_details", missing: ["destination"] };
-      const category = a.category === "dealership" ? "Car dealership" : "Car rental agency";
-      s.attachments.push({ type: "businesses", destinationCode: s.trip.destinationCode, category });
-      return {
-        ok: true,
-        shown_to_user: `A map search for ${category.toLowerCase()} near ${findAirport(s.trip.destinationCode)?.city ?? s.trip.destinationCode} is shown under your reply.`,
-        note: "Pyrius has no verified business directory. Do not name businesses, phone numbers or addresses. Dealerships sell cars; they usually don't rent them.",
+        data_source:
+          result.source === "live"
+            ? "Real businesses listed on Google Maps right now, with their Google rating. You may name them. They don't publish prices Pyrius can read: never state or estimate a price for them; say each one quotes on its website or by phone."
+            : "No business directory is connected; don't name any business.",
+        shown_to_user: `Cards for ${category.toLowerCase()}s near ${where} are shown under your reply, with phone, website and map links. Highlight two or three; don't list them all.`,
+        widened: result.widened ? `None were found close to ${where}; the cards show the nearest ones and how far away they are. Say so.` : null,
+        found: result.businesses.length,
+        top: result.businesses.slice(0, 6).map((b) => ({ name: b.name, type: b.type ?? null, rating: b.rating ?? null, reviews: b.reviews ?? null, km_away: b.distanceKm ?? null, has_website: Boolean(b.website) })),
+        deals_hint:
+          category === "Private jet charter" || category === "Yacht charter"
+            ? "If the user wants deals (for example empty-leg flights or last-minute charters), use web search for currently published offers and cite each source. Present them as published offers to confirm with the operator, never as bookable Pyrius prices."
+            : category === "Car dealership"
+              ? "Dealerships sell cars; they usually don't rent them. Prices are on each dealer's website."
+              : null,
       };
     }
 
@@ -670,6 +651,3 @@ export async function runTool(name: string, rawArgs: string, s: TurnState): Prom
       return { ok: false, error: `Unknown action "${name}".` };
   }
 }
-
-const offerLabel = (o: AnyOffer) =>
-  o.kind === "flight" ? `${o.offer.airline.name} ${o.offer.outbound.from} → ${o.offer.outbound.to}` : o.kind === "hotel" ? o.offer.name : `${o.offer.category} · ${o.offer.supplier}`;

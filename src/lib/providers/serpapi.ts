@@ -1,4 +1,5 @@
 import { flightSearchUrl } from "@/lib/booking";
+import { findAirport } from "@/lib/data/world";
 import type { FlightOffer, FlightSearchParams, FlightSegment } from "@/lib/types";
 import { hash } from "@/lib/utils";
 import { ProviderError } from "./errors";
@@ -103,27 +104,45 @@ export interface BookingChoice {
   currency: string;
 }
 
-async function call(params: Record<string, string>): Promise<SerpResponse> {
+/** Searches left on the SerpApi account this month. Reading it is free; null when it can't be read. */
+export async function serpApiSearchesLeft(): Promise<number | null> {
   const k = key();
-  if (!k) throw new ProviderError("not_configured", PROVIDER);
-  const qs = new URLSearchParams({ engine: "google_flights", hl: "en", gl: "ca", ...params, api_key: k });
+  if (!k) return null;
+  try {
+    const res = await fetch(`${base()}/account.json?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000), cache: "no-store" });
+    const body = (await res.json()) as { total_searches_left?: number };
+    return typeof body.total_searches_left === "number" ? body.total_searches_left : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One SerpApi request. Other Google engines (Hotels, Maps) share it, so errors and timeouts read the same everywhere. */
+export async function serpApiCall<T = SerpResponse>(params: Record<string, string>, engine = "google_flights", provider = PROVIDER): Promise<T & { error?: string }> {
+  return (await call(params, engine, provider)) as T & { error?: string };
+}
+
+async function call(params: Record<string, string>, engine = "google_flights", provider = PROVIDER): Promise<SerpResponse> {
+  const k = key();
+  if (!k) throw new ProviderError("not_configured", provider);
+  const qs = new URLSearchParams({ engine, hl: "en", gl: "ca", ...params, api_key: k });
   let res: Response;
   try {
     res = await fetch(`${base()}/search.json?${qs}`, { signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   } catch (err) {
     const name = (err as Error).name;
-    throw new ProviderError(name === "TimeoutError" || name === "AbortError" ? "timeout" : "unavailable", PROVIDER);
+    throw new ProviderError(name === "TimeoutError" || name === "AbortError" ? "timeout" : "unavailable", provider);
   }
   const body = (await res.json().catch(() => ({}))) as SerpResponse;
   const msg = (body.error ?? "").toLowerCase();
-  if (res.status === 401 || res.status === 403 || msg.includes("invalid api key") || msg.includes("api key")) throw new ProviderError("auth", PROVIDER, body.error);
-  if (res.status === 429 || msg.includes("run out of searches") || msg.includes("rate limit") || msg.includes("throughput")) throw new ProviderError("quota", PROVIDER, body.error);
+  if (res.status === 401 || res.status === 403 || msg.includes("invalid api key") || msg.includes("api key")) throw new ProviderError("auth", provider, body.error);
+  if (res.status === 429 || msg.includes("run out of searches") || msg.includes("rate limit") || msg.includes("throughput")) throw new ProviderError("quota", provider, body.error);
   // Google simply had nothing for this query: that's an empty result, not a failure.
   if (msg.includes("hasn't returned any results") || msg.includes("no results")) return {};
-  if (msg.includes("expired") || msg.includes("invalid token") || msg.includes("booking_token") || msg.includes("departure_token")) throw new ProviderError("expired", PROVIDER, body.error);
+  if (msg.includes("expired") || msg.includes("invalid token") || msg.includes("booking_token") || msg.includes("departure_token")) throw new ProviderError("expired", provider, body.error);
   if (!res.ok || body.error) {
     console.error("SerpApi error", res.status, body.error?.slice(0, 200));
-    throw new ProviderError(res.status === 400 ? "bad_request" : "unavailable", PROVIDER, body.error);
+    throw new ProviderError(res.status === 400 ? "bad_request" : "unavailable", provider, body.error);
   }
   return body;
 }
@@ -194,6 +213,7 @@ export function toOffer(it: SerpItinerary, p: FlightSearchParams, fetchedAt: str
     provider: PROVIDER,
     airline: { code, name: airlines.join(" + ") || code, color: color(code), logo: it.airline_logo ?? first.airline_logo },
     outbound: seg,
+    places: { from: findAirport(seg.from)?.city ?? seg.from, to: findAirport(seg.to)?.city ?? seg.to },
     cabin: CABINS[(first.travel_class ?? "economy").toLowerCase()] ?? "Economy",
     totalPrice: Math.round(it.price),
     pricePerTraveler: Math.round(it.price / Math.max(1, travelers)),

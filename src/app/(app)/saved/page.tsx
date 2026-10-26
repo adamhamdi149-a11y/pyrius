@@ -63,7 +63,6 @@ function SavedInner() {
             ["all", t("common.all")],
             ["flight", t("common.flights")],
             ["hotel", t("common.hotels")],
-            ["car", t("common.cars")],
           ] as const
         ).map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>

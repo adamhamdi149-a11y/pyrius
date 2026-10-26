@@ -1,18 +1,7 @@
-import type {
-  CarOffer,
-  CarSearchParams,
-  DataSource,
-  FlightOffer,
-  FlightSearchParams,
-  HotelOffer,
-  HotelSearchParams,
-  LocalBusiness,
-  LocalBusinessResult,
-  PriceTracker,
-} from "@/lib/types";
+import type { BusinessCategory, DataSource, FlightOffer, FlightSearchParams, HotelOffer, HotelSearchParams, LocalBusinessResult } from "@/lib/types";
 
 /**
- * Adapter contracts. A real provider (Duffel, Amadeus, Booking affiliate, a Places API…)
+ * Adapter contracts. A provider (Google Flights, Google Hotels, Google Maps through SerpApi…)
  * implements these and is swapped in via `getProviders()` without touching the UI.
  */
 
@@ -28,28 +17,15 @@ export interface HotelProvider {
   search(params: HotelSearchParams): Promise<HotelOffer[]>;
 }
 
-export interface CarProvider {
-  id: string;
-  source: DataSource;
-  search(params: CarSearchParams): Promise<CarOffer[]>;
-}
-
+/** Car rental agencies, dealerships, private jet and yacht charters near an airport. */
 export interface LocalBusinessProvider {
   id: string;
   source: DataSource;
-  search(destinationCode: string, category: LocalBusiness["category"]): Promise<LocalBusinessResult>;
-}
-
-/** Re-prices a tracked offer. Real implementations run server-side on a schedule. */
-export interface PriceCheckProvider {
-  id: string;
-  source: DataSource;
-  check(tracker: PriceTracker): Promise<{ price: number; available: boolean; checkedAt: string }>;
+  search(airportCode: string, category: BusinessCategory): Promise<LocalBusinessResult>;
 }
 
 export interface TravelProviders {
   flights: FlightProvider;
   hotels: HotelProvider;
-  cars: CarProvider;
   businesses: LocalBusinessProvider;
 }

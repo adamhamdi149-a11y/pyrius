@@ -7,8 +7,9 @@ const KEY = "pyrius:pending-prompt";
 const MAX_AGE_MS = 1000 * 60 * 60 * 24; // a day is plenty to finish signing up
 
 export function savePendingPrompt(text: string) {
-  const t = text.trim().slice(0, 600);
-  if (!t) return;
+  // A trailing space is kept, so a half-written request ("Find me a hotel in ") is ready to finish.
+  const t = text.replace(/^\s+/, "").slice(0, 600);
+  if (!t.trim()) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ t, at: Date.now() }));
   } catch {}

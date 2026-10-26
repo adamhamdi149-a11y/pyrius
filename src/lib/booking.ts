@@ -13,8 +13,8 @@ export function flightSearchUrl(o: string, d: string, depart: string, ret: strin
   return `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`;
 }
 
-export function hotelSearchUrl(destCode: string, checkIn: string, checkOut: string, guests: number, rooms: number, name?: string) {
-  const city = airportByCode(destCode)?.city ?? destCode;
+export function hotelSearchUrl(destCode: string, checkIn: string, checkOut: string, guests: number, rooms: number, name?: string, cityName?: string) {
+  const city = cityName ?? airportByCode(destCode)?.city ?? destCode;
   const params = new URLSearchParams({
     ss: name ? `${name}, ${city}` : city,
     checkin: checkIn,

@@ -9,6 +9,7 @@ import { HotelResults } from "@/components/results/HotelResults";
 import { applyFlightFilters } from "@/components/results/FlightResults";
 import { offerTitle } from "@/components/results/OfferActions";
 import { flightBrief } from "@/lib/flights/brief";
+import { hotelBrief, sortStays } from "@/lib/hotels/brief";
 import { authHeaders } from "@/lib/authHeaders";
 import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
@@ -195,7 +196,6 @@ export function Assistant() {
     };
     const flights = latest("flights");
     const hotels = latest("hotels");
-    const cars = latest("cars");
     const tracked = new Map(store.trackers.map((t) => [t.offerId, t]));
     // The flight cards in the order they're shown, so "the second one" means the same thing to the AI.
     const snap = flights?.snapshot;
@@ -212,8 +212,7 @@ export function Assistant() {
     return {
       results: {
         flights: flights && { params: flights.params, sort: flights.filters?.sort, source: snap?.source, fetchedAt: snap?.fetchedAt, shown },
-        hotels: hotels?.params,
-        cars: cars?.params,
+        hotels: hotels && { params: hotels.params, shown: sortStays(hotels.snapshot?.offers ?? [], hotels.sort ?? "price").map((h, i) => hotelBrief(h, i + 1)) },
       },
       saved: store.saved.slice(0, 60).map((s) => ({
         id: s.id,
@@ -233,8 +232,10 @@ export function Assistant() {
   const findOffer = (c: Conversation, id: string): AnyOffer | undefined => {
     for (let i = c.messages.length - 1; i >= 0; i--) {
       for (const a of messageAttachments(c.messages[i])) {
-        const hit = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
-        if (hit) return { kind: "flight", offer: hit };
+        const flight = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+        if (flight) return { kind: "flight", offer: flight };
+        const stay = a.type === "hotels" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+        if (stay) return { kind: "hotel", offer: stay };
       }
     }
     return store.saved.find((s) => s.id === id)?.data;
@@ -378,8 +379,8 @@ export function Assistant() {
       c,
       {
         text: L(
-          `Updated. Here are options for ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}. Same as before, these are demo prices rather than live fares.`,
-          `C'est à jour. Voici les options pour ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}. Comme avant, ce sont des prix de démonstration.`,
+          `Updated. Here are ${flightMode === "live" ? "live fares" : "options"} for ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}.`,
+          `C'est à jour. Voici ${flightMode === "live" ? "les tarifs en direct" : "les options"} pour ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}.`,
         ),
         attachment: { type: "flights", params: p, budget: c.prefs.budget || undefined, filters: { nonstopOnly: c.prefs.nonstopOnly, carryOnOnly: c.prefs.carryOnOnly } },
         chips: [{ label: L("Find a place to stay", "Trouver un hébergement"), action: { type: "hotels", stayType: "hotel" } }],
@@ -430,7 +431,7 @@ export function Assistant() {
         : flash === "success"
           ? L("Reply ready.", "Réponse prête.")
           : flightMode === "live"
-            ? L("Live fares from Google Flights. You always book directly with the airline or travel site.", "Tarifs en direct de Google Flights. Vous réservez toujours directement auprès de la compagnie ou du site de voyage.")
+            ? L("Live prices from Google. You always book directly with the airline, hotel or travel site.", "Prix en direct de Google. Vous réservez toujours directement auprès de la compagnie, de l'hôtel ou du site de voyage.")
             : flightMode === "none"
               ? L("Pyrius suggests and compares. Live flight search isn't connected yet.", "Pyrius suggère et compare. La recherche de vols en direct n'est pas encore connectée.")
               : L("Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.", "Pyrius suggère et compare; vous réservez toujours directement auprès du fournisseur. Les prix affichés sont des données de démonstration.");

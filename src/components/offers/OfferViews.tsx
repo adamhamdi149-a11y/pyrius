@@ -1,8 +1,8 @@
 "use client";
-import { ArrowDownRight, ArrowUpRight, Bell, BellOff, BellRing, Car, ExternalLink, Hotel, Maximize2, Minus, Pause, Plane, Play, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Bell, BellOff, BellRing, Car, ExternalLink, Hotel, Maximize2, Minus, Pause, Plane, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { CarCard } from "@/components/results/CarResults";
 import { BookingDialog, openBookingTab } from "@/components/results/BookingDialog";
+import { HotelBookingDialog, openHotelTab } from "@/components/results/HotelBookingDialog";
 import { FlightCard } from "@/components/results/FlightResults";
 import { HotelCard } from "@/components/results/HotelResults";
 import { PriceChart } from "@/components/tracking/PriceChart";
@@ -27,7 +27,7 @@ export function describeOffer(o: AnyOffer, locale: "en" | "fr" = "en") {
   }
   if (o.kind === "hotel") {
     const h = o.offer;
-    return { title: h.name, sub: `${h.neighborhood}, ${h.city} · ${formatRange(h.checkIn, h.checkOut, locale)} · ${h.nights} nights`, start: h.checkIn };
+    return { title: h.name, sub: `${h.neighborhood ? `${h.neighborhood}, ` : ""}${h.city} · ${formatRange(h.checkIn, h.checkOut, locale)} · ${h.nights} night${h.nights > 1 ? "s" : ""}`, start: h.checkIn };
   }
   const c = o.offer;
   return { title: `${c.category} · ${c.supplier}`, sub: `${c.pickupLocation} · ${formatRange(c.pickUp, c.dropOff, locale)}`, start: c.pickUp };
@@ -64,7 +64,7 @@ export function Delta({ from, to, currency, locale }: { from: number; to: number
       </span>
     );
   return (
-    <span className={cx("delta num", d < 0 ? "delta--down" : "delta--up")} title="Change since you saved it (simulated)">
+    <span className={cx("delta num", d < 0 ? "delta--down" : "delta--up")} title="Change since you saved it">
       {d < 0 ? <ArrowDownRight /> : <ArrowUpRight />}
       {money(Math.abs(d), currency, locale)}
     </span>
@@ -77,10 +77,9 @@ export function OfferDetailDialog({ item, onClose }: { item: SavedOffer | null; 
   if (!item) return null;
   const o = item.data;
   return (
-    <Dialog open onClose={onClose} title={describeOffer(o, settings.locale).title} description={`Saved ${timeAgo(item.savedAt, settings.locale)} · demo data`} wide>
+    <Dialog open onClose={onClose} title={describeOffer(o, settings.locale).title} description={`Saved ${timeAgo(item.savedAt, settings.locale)}${o.offer.source === "live" ? " · price when saved" : " · example data"}`} wide>
       {o.kind === "flight" && <FlightCard offer={o.offer} tags={[]} locale={settings.locale} />}
       {o.kind === "hotel" && <HotelCard h={o.offer} locale={settings.locale} />}
-      {o.kind === "car" && <CarCard c={o.offer} locale={settings.locale} />}
     </Dialog>
   );
 }
@@ -95,6 +94,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
   const loc = store.settings.locale;
   const o = item.data;
   const bookable = o.kind === "flight" && o.offer.source === "live" && o.offer.booking ? o.offer : null;
+  const bookableStay = o.kind === "hotel" && o.offer.source === "live" && o.offer.propertyToken ? o.offer : null;
   const d = describeOffer(o, loc);
   const tracker = store.trackerFor(item.id);
   const price = tracker?.lastKnownPrice ?? o.offer.totalPrice;
@@ -139,15 +139,15 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
         <button className={cx("icon-btn", tracker && "icon-btn--on")} onClick={() => setTrack(true)} aria-label={tracker ? "Edit tracking" : "Track price"} title={tracker ? "Edit tracking" : "Track price"}>
           {tracker ? <BellRing /> : <Bell />}
         </button>
-        {bookable ? (
+        {bookable || bookableStay ? (
           <button
             className="icon-btn"
             onClick={() => {
-              setBookTab(openBookingTab(bookable));
+              setBookTab(bookable ? openBookingTab(bookable) : openHotelTab(bookableStay!));
               setBook(true);
             }}
-            aria-label="Book this flight"
-            title="Book with the seller that has the lowest price"
+            aria-label={bookable ? "Book this flight" : "Book this stay"}
+            title={bookable ? "Book with the seller that has the lowest price" : "Book with the site that has the lowest price"}
           >
             <ExternalLink />
           </button>
@@ -164,6 +164,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
           </a>
         )}
         {bookable && <BookingDialog offer={bookable} open={book} tab={bookTab} onClose={() => setBook(false)} />}
+        {bookableStay && <HotelBookingDialog offer={bookableStay} open={book} tab={bookTab} onClose={() => setBook(false)} />}
         <button className="icon-btn" onClick={remove} aria-label={`Remove ${d.title}`} title="Remove">
           <Trash2 />
         </button>
@@ -192,7 +193,7 @@ export function SavedRow({ item, onOpen, index = 0 }: { item: SavedOffer; onOpen
           const r = store.startTracking(o, target, item.conversationId);
           setTrack(false);
           if (!r.ok) toast({ tone: "info", title: "Plan limit reached", description: r.message });
-          else toast({ title: tracker ? "Target updated" : "Tracking started (simulated)" });
+          else toast({ title: tracker ? "Target updated" : "Tracking started", description: tracker ? undefined : "Pyrius checks the price every 6 hours, even when the app is closed." });
         }}
       />
     </div>
@@ -237,6 +238,15 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
   const loc = store.settings.locale;
   const Icon = KIND_ICON[t.kind];
   const saved = store.saved.find((s) => s.id === t.offerId);
+  const [checking, setChecking] = useState(false);
+  const checkNow = async () => {
+    setChecking(true);
+    const r = await store.checkNow(t.id);
+    setChecking(false);
+    if (r.failed) toast({ tone: "info", title: "Couldn't check the price right now", description: r.message ?? "Please try again in a moment." });
+    else if (r.unavailable) toast({ tone: "info", title: "No longer available", description: "This exact offer isn't being sold any more. Search again for current options." });
+    else toast({ tone: r.reached ? "success" : "info", title: r.reached ? "At or below your target" : "Price checked", description: r.price !== undefined ? `Now ${money(r.price, t.currency, loc)}.` : undefined });
+  };
 
   return (
     <article className="tcard" data-glow style={{ animationDelay: `${index * 50}ms` }}>
@@ -253,7 +263,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <StatusBadge t={t} />
-          {t.source === "demo" ? <DemoBadge label="Simulated prices" /> : <span className="badge badge--live">Live fare</span>}
+          {t.source === "demo" ? <DemoBadge label="Example" /> : <span className="badge badge--live">Live price</span>}
         </div>
         <div className="tcard__stats">
           <div className="stat">
@@ -261,7 +271,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
             <div className="stat__value num">{money(t.savedPrice, t.currency, loc)}</div>
           </div>
           <div className="stat">
-            <div className="stat__label">{t.source === "demo" ? "Now (simulated)" : "Last known"}</div>
+            <div className="stat__label">Last checked</div>
             <div className="stat__value num">{money(t.lastKnownPrice, t.currency, loc)}</div>
           </div>
           <div className="stat stat--target">
@@ -270,9 +280,7 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
           </div>
         </div>
         <div className="t-meta">
-          {t.source === "demo"
-            ? `Last simulated check ${timeAgo(t.lastCheckedAt, loc)} · ${t.history.length} data points`
-            : `Price from ${timeAgo(t.lastCheckedAt, loc)}. Automatic re-checks for live fares aren't running yet; search again to see the current fare.`}
+          {`Checked ${timeAgo(t.lastCheckedAt, loc)} · ${t.history.length} price${t.history.length === 1 ? "" : "s"} recorded. Pyrius re-checks it every 6 hours, even when the app is closed.`}
         </div>
         <div className="tcard__actions">
           <button className="btn btn--secondary btn--sm" onClick={() => setEdit(true)}>
@@ -288,15 +296,9 @@ export function TrackerCard({ t, index = 0 }: { t: PriceTracker; index?: number 
             {t.status === "paused" ? <Play /> : <Pause />}
             {t.status === "paused" ? "Resume" : "Pause"}
           </button>
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={() => {
-              store.runSimulatedCheck(t.id);
-              toast({ tone: "info", title: "Simulated check complete", description: "A demo price point was added. This is not a live fare." });
-            }}
-            disabled={t.status === "paused"}
-          >
-            Run simulated check
+          <button className="btn btn--ghost btn--sm" onClick={checkNow} disabled={t.status === "paused" || checking || t.source !== "live"}>
+            <RefreshCw className={checking ? "spin" : undefined} />
+            {checking ? "Checking…" : "Check now"}
           </button>
           <button
             className="btn btn--ghost btn--sm"
