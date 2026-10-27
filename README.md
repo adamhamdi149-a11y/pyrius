@@ -12,6 +12,9 @@ npm run dev        # http://localhost:3000
 npm run build && npm start
 ```
 
+The iPhone and Android app lives in [`mobile/`](mobile/README.md) (Expo). It uses this server's API and
+shares the pure modules in `src/lib`.
+
 Works with **no keys at all** (demo AI, demo travel data, browser-only storage, demo checkout).
 Copy `.env.example` to `.env.local` to connect real services.
 
@@ -33,11 +36,14 @@ Copy `.env.example` to `.env.local` to connect real services.
 | Persistence | `src/lib/store/AppStore.tsx` + `repository.ts` (Local or Supabase) |
 | Plans & entitlements | `src/lib/plans.ts`, Stripe in `src/app/api/checkout` and `src/app/api/stripe/webhook` |
 | Database schema + RLS | `supabase/migrations/0001_pyrius.sql` |
+| Voice (mobile) | `src/lib/ai/voice` (Realtime model, voices, spoken style), `src/app/api/voice/*` (session secret, tool calls, dictation, speech) |
+| Request checks shared by chat and voice | `src/lib/ai/concierge/clean.ts` |
 
 ## Integrations
 
-- **OpenAI** (`OPENAI_API_KEY`): server-side, only extracts trip fields as validated JSON. It never produces
-  offers or prices. Without it, a built-in EN/FR parser runs and the UI shows "Demo AI".
+- **OpenAI** (`OPENAI_API_KEY`): server-side, runs the concierge through validated tools. It never produces
+  offers or prices. Without it, a built-in EN/FR parser runs and the UI shows "Demo AI". The same key powers
+  the mobile app's voice: the server mints short-lived Realtime client secrets, so the key never reaches a phone.
 - **Supabase**: run the migration, add the URL + anon key. Users can sign in (`/login`); conversations,
   saved offers, trackers and settings sync per user under row-level security. Without it, data lives in
   `localStorage` and the app says so.

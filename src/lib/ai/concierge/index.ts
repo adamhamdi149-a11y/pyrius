@@ -164,8 +164,8 @@ async function restoreShown(r: ConciergeRequest["results"]) {
   return { ...r, flights: { ...r.flights, source: "demo" as const, shown: sorted.slice(0, 12).map((o, i) => flightBrief(o, i + 1)) } };
 }
 
-export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
-  const deadline = Date.now() + TURN_BUDGET_MS;
+/** The tools' working state for one turn, from the conversation the app sent. Text and voice both start here. */
+export async function turnStateFor(req: Pick<ConciergeRequest, "trip" | "today" | "locale" | "results" | "saved" | "plan" | "counts">) {
   const results = await restoreShown(req.results).catch(() => req.results);
   const state: TurnState = {
     trip: { ...req.trip, currency: req.trip.currency ?? "CAD" },
@@ -180,7 +180,11 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     actions: [],
     toolCalls: 0,
   };
+  return { state, results };
+}
 
+/** The per-turn facts the model gets: date, settings, the trip so far and the result cards on screen. */
+export async function turnContext(req: Pick<ConciergeRequest, "today" | "locale" | "homeAirport" | "stage" | "saved">, state: TurnState, results: ConciergeRequest["results"]) {
   const shown = shownResults(results);
   const context = contextMessage({
     today: req.today,
@@ -192,9 +196,16 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     flightMode: flightMode(),
     hasResults: Boolean(results.flights?.shown.length && resultsMatch(state.trip, [results.flights.params], req.today)),
   });
+  return shown ? `${context}\n${shown}` : context;
+}
+
+export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
+  const deadline = Date.now() + TURN_BUDGET_MS;
+  const { state, results } = await turnStateFor(req);
+  const context = await turnContext(req, state, results);
 
   const input: unknown[] = [
-    { role: "developer", content: shown ? `${context}\n${shown}` : context },
+    { role: "developer", content: context },
     ...req.history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: req.message },
   ];

@@ -7,14 +7,11 @@ import { BookingDialog, openBookingTab } from "./BookingDialog";
 import { HotelBookingDialog, openHotelTab } from "./HotelBookingDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
+import { offerTitle } from "@/lib/offers";
 import type { AnyOffer } from "@/lib/types";
 import { cx, money } from "@/lib/utils";
 
-export function offerTitle(o: AnyOffer) {
-  if (o.kind === "flight") return `${o.offer.airline.name} · ${o.offer.outbound.from} → ${o.offer.outbound.to}`;
-  if (o.kind === "hotel") return `${o.offer.name}`;
-  return `${o.offer.category} · ${o.offer.supplier}`;
-}
+export { offerTitle };
 
 const PROVIDER_NAME = { flight: "Google Flights", hotel: "Booking.com", car: "Kayak" } as const;
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { allow } from "@/lib/ai/concierge/rateLimit";
+import { allow, type RateWindows } from "@/lib/ai/concierge/rateLimit";
 import { isAirportCode } from "@/lib/data/world";
 import { travelersProblem } from "@/lib/flights/workflow";
 import { getUserFromRequest } from "@/lib/supabase/server";
@@ -9,18 +9,18 @@ import type { BusinessCategory, FlightSearchParams, HotelSearchParams } from "@/
  * Requests that spend paid quota (AI, live flight searches, booking lookups) need a signed-in
  * user in production, and each user is rate-limited per bucket.
  */
-export async function gate(req: Request, bucket: string): Promise<{ who: string } | NextResponse> {
+export async function gate(req: Request, bucket: string, windows?: RateWindows): Promise<{ who: string; userId?: string } | NextResponse> {
   const supabaseOn = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const user = supabaseOn ? await getUserFromRequest(req) : null;
   if (supabaseOn && !user && process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Please sign in to use Pyrius.", code: "signed_out" }, { status: 401 });
   }
   const who = user?.id ?? `ip:${req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local"}`;
-  const ok = allow(`${bucket}:${who}`);
+  const ok = allow(`${bucket}:${who}`, Date.now(), windows);
   if (!ok.ok) {
     return NextResponse.json({ error: "You're going a little fast. Give it a moment and try again.", code: "slow_down" }, { status: 429, headers: { "Retry-After": String(ok.retryAfter) } });
   }
-  return { who };
+  return { who, userId: user?.id };
 }
 
 const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);

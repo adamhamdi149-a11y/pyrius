@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Pyrius",
+    "slug": "pyrius",
+    "scheme": "pyrius",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#090a0d",
+    "ios": {
+      "bundleIdentifier": "app.pyrius.mobile",
+      "supportsTablet": false,
+      "config": { "usesNonExemptEncryption": false },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Pyrius uses the microphone when you dictate a message or talk with Pyrius in voice mode.",
+        "NSLocationWhenInUseUsageDescription": "Pyrius uses your location once to set your home airport."
+      }
+    },
+    "android": {
+      "package": "app.pyrius.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0c0d11",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS", "android.permission.ACCESS_COARSE_LOCATION"],
+      "blockedPermissions": ["android.permission.CAMERA", "android.permission.SYSTEM_ALERT_WINDOW", "android.permission.ACCESS_FINE_LOCATION"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      ["expo-audio", { "microphonePermission": "Pyrius uses the microphone when you dictate a message or talk with Pyrius in voice mode." }],
+      "expo-web-browser",
+      ["expo-splash-screen", { "image": "./assets/splash-icon.png", "imageWidth": 96, "backgroundColor": "#090a0d" }],
+      "expo-localization",
+      ["expo-location", { "locationWhenInUsePermission": "Pyrius uses your location once to set your home airport." }],
+      ["expo-notifications", { "color": "#ff7628" }],
+      ["@config-plugins/react-native-webrtc", {
+        "microphonePermission": "Pyrius uses the microphone when you dictate a message or talk with Pyrius in voice mode.",
+        "cameraPermission": "Pyrius doesn't use your camera. The voice calling library requires this description."
+      }]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}
