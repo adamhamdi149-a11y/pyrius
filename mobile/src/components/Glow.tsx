@@ -6,7 +6,7 @@ import { useAccent } from "./ui";
 export function Glow({ cy = 0.4, strength = 0.07 }: { cy?: number; strength?: number }) {
   const accent = useAccent();
   return (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none" aria-hidden>
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none" aria-hidden>
       <Defs>
         <RadialGradient id="pyriusGlow" cx="50%" cy={`${cy * 100}%`} rx="75%" ry="45%">
           <Stop offset="0" stopColor={accent.accent} stopOpacity={strength} />

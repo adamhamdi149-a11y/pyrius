@@ -30,7 +30,7 @@ function Illustration() {
         </View>
         <View style={{ flex: 1 }}>
           <T weight="semibold" style={{ fontSize: 13 }}>{L("Price dropped", "Le prix a baissé")}</T>
-          <T style={{ fontSize: 13, color: colors.text2 }} numberOfLines={1}>{`${placeName(from)} → Lisboa · $612`}</T>
+          <T style={{ fontSize: 13, color: colors.text2 }} numberOfLines={1}>{`${placeName(from, settings.locale)} → ${placeName("LIS", settings.locale)} · $612`}</T>
         </View>
         <T style={{ fontSize: 12, color: colors.text3, alignSelf: "flex-start" }}>{L("now", "maint.")}</T>
       </Animated.View>
