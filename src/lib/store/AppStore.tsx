@@ -2,26 +2,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { translate, type MessageKey } from "@/lib/i18n";
 import { canAddTracker, canSave, DEFAULT_SUBSCRIPTION, planById } from "@/lib/plans";
-import { DEFAULT_ORB_THEME, orbThemeById } from "@/lib/orbThemes";
+import { orbThemeById } from "@/lib/orbThemes";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { simulateCheck, trackerFromOffer } from "@/lib/tracking/simulator";
 import type { AnyOffer, Conversation, PlanId, PriceTracker, SavedOffer, Subscription, UserSettings } from "@/lib/types";
-import { uid } from "@/lib/utils";
+import { DEFAULT_SETTINGS } from "./defaults";
 import { LocalRepository, SupabaseRepository, type PersistedState, type Repository } from "./repository";
 
-export const DEFAULT_SETTINGS: UserSettings = {
-  name: "",
-  email: "",
-  homeAirport: "YUL",
-  currency: "CAD",
-  locale: "en",
-  theme: "dark",
-  orbTheme: DEFAULT_ORB_THEME,
-  defaultAdults: 1,
-  defaultChildren: 0,
-  travelStyle: { nonstop: false, carryOnOnly: false, flexibleDates: true },
-  notifications: { email: true, priceAlerts: true, savedSearches: false, productNews: false },
-};
+export { DEFAULT_SETTINGS, newConversation } from "./defaults";
 
 export type AuthState =
   | { mode: "local" }
@@ -327,21 +315,4 @@ export function useStore() {
   const s = useContext(Ctx);
   if (!s) throw new Error("useStore must be used inside AppStoreProvider");
   return s;
-}
-
-export function newConversation(settings: UserSettings): Conversation {
-  const now = new Date().toISOString();
-  return {
-    id: uid("c_"),
-    title: "New trip",
-    createdAt: now,
-    updatedAt: now,
-    messages: [],
-    stage: "collecting",
-    prefs: {
-      currency: settings.currency,
-      ...(settings.travelStyle.nonstop ? { nonstopOnly: true } : {}),
-      ...(settings.travelStyle.carryOnOnly ? { carryOnOnly: true } : {}),
-    },
-  };
 }

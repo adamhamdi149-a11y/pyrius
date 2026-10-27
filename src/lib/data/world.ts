@@ -80,3 +80,22 @@ export function searchAirports(query: string, limit = 8): WorldAirport[] {
   }
   return scored.sort((x, y) => y.s - x.s || x.a.city.localeCompare(y.a.city)).slice(0, limit).map((x) => x.a);
 }
+
+/** The closest airport with regular scheduled service (medium or large) to a point, e.g. the user's location. */
+export function nearestAirport(lat: number, lon: number): (WorldAirport & { km: number }) | undefined {
+  const rad = Math.PI / 180;
+  let best: WorldAirport | undefined;
+  let bestKm = Infinity;
+  for (const a of load().values()) {
+    if (a.size < 2) continue;
+    const h = Math.sin(((a.lat - lat) * rad) / 2) ** 2 + Math.cos(lat * rad) * Math.cos(a.lat * rad) * Math.sin(((a.lon - lon) * rad) / 2) ** 2;
+    const km = 12742 * Math.asin(Math.sqrt(h));
+    // A large airport wins over a slightly closer regional one.
+    const score = km - (a.size === 3 ? 40 : 0);
+    if (score < bestKm) {
+      bestKm = score;
+      best = a;
+    }
+  }
+  return best ? { ...best, km: Math.round(bestKm + (best.size === 3 ? 40 : 0)) } : undefined;
+}

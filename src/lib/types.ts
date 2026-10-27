@@ -298,6 +298,8 @@ export interface ChatMessage {
   attachments?: Attachment[];
   /** Web pages the AI consulted for this reply. */
   sources?: WebSource[];
+  /** Said out loud in a voice conversation (transcript), rather than typed. */
+  via?: "voice";
 }
 
 export interface WebSource {
@@ -357,6 +359,19 @@ export interface UserSettings {
   defaultChildren: number;
   travelStyle: { nonstop: boolean; carryOnOnly: boolean; flexibleDates: boolean };
   notifications: { email: boolean; priceAlerts: boolean; savedSearches: boolean; productNews: boolean };
+  /** Voice conversation settings (mobile app). */
+  voice?: VoiceSettings;
+}
+
+export interface VoiceSettings {
+  /** Voice conversations are offered in the app. */
+  enabled: boolean;
+  /** One of the voices the server accepts (lib/ai/voice). */
+  voice: string;
+  /** Pyrius answers out loud in voice mode; off means it answers in text while you speak. */
+  spoken: boolean;
+  /** Hide the microphone and voice buttons everywhere. */
+  textOnly: boolean;
 }
 
 export type BillingInterval = "month" | "year";
