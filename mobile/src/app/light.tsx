@@ -17,7 +17,7 @@ export default function Light() {
             label={L("Continue", "Continuer")}
             onPress={() => {
               setOnboarded(true);
-              router.dismissAll();
+              if (router.canDismiss()) router.dismissAll();
               router.replace("/chat");
             }}
           />

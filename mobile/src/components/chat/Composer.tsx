@@ -5,7 +5,7 @@ import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from "react-nativ
 import { useDictation } from "~/lib/dictation";
 import type { QuickPrefs } from "~/lib/conversation";
 import { useStore } from "~/lib/store";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 import { T, tap, useAccent } from "../ui";
 
 export interface ComposerHandle {
@@ -202,7 +202,7 @@ const s = StyleSheet.create({
   pillRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   placeholder: { flex: 1, height: 44, justifyContent: "center", paddingHorizontal: 8 },
   card: { borderRadius: 30, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },
-  input: { color: colors.text, fontFamily: fonts.regular, fontSize: 17, lineHeight: 23, minHeight: 28, maxHeight: 150, paddingHorizontal: 8, paddingTop: 0, paddingBottom: 6, textAlignVertical: "top" },
+  input: { ...noOutline, color: colors.text, fontFamily: fonts.regular, fontSize: 17, lineHeight: 23, minHeight: 28, maxHeight: 150, paddingHorizontal: 8, paddingTop: 0, paddingBottom: 6, textAlignVertical: "top" },
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   round: { width: 44, height: 44, borderRadius: radii.pill, alignItems: "center", justifyContent: "center" },
   prefs: { height: 44, paddingHorizontal: 16, borderRadius: radii.pill, backgroundColor: colors.surface2, flexDirection: "row", alignItems: "center", gap: 8 },

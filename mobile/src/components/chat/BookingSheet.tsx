@@ -28,18 +28,14 @@ function openSeller(req: NonNullable<BookingOption["request"]>) {
 export function BookingSheet({ offer, open, onClose }: { offer: FlightOffer; open: boolean; onClose: () => void }) {
   const { L, settings } = useStore();
   const accent = useAccent();
-  const [ready, setReady] = useState<Ready | null>(null);
-  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
-  const [loading, setLoading] = useState(false);
   const ref = offer.booking;
+  const noRef = { message: L("This offer can't be booked from Pyrius. Search again for current options.", "Cette offre ne peut pas être réservée depuis Pyrius. Relancez la recherche."), code: "expired" };
+  const [ready, setReady] = useState<Ready | null>(null);
+  const [error, setError] = useState<{ message: string; code?: string } | null>(ref ? null : noRef);
+  const [loading, setLoading] = useState(Boolean(ref));
 
-  const load = async () => {
-    if (!ref) {
-      setError({ message: L("This offer can't be booked from Pyrius. Search again for current options.", "Cette offre ne peut pas être réservée depuis Pyrius. Relancez la recherche."), code: "expired" });
-      return;
-    }
-    setLoading(true);
-    setError(null);
+  const run = async () => {
+    if (!ref) return;
     try {
       const step = offer.returnPending && ref.departureToken ? "trip" : "options";
       const token = step === "trip" ? ref.departureToken : ref.bookingToken;
@@ -52,14 +48,19 @@ export function BookingSheet({ offer, open, onClose }: { offer: FlightOffer; ope
     }
   };
 
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    run();
+  };
+
+  // The sheet is mounted only while it's open, so each opening starts a fresh lookup.
   useEffect(() => {
-    if (open && !ready && !loading) load();
-    if (!open) {
-      setReady(null);
-      setError(null);
-    }
+    // run() sets state only when the lookup answers, never synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, []);
 
   const best = ready?.choices[0];
   const others = ready?.choices.slice(1, 6) ?? [];

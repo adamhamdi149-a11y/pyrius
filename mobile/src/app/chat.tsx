@@ -41,6 +41,7 @@ export default function Chat() {
   const composer = useRef<ComposerHandle>(null);
   const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
   const stick = useRef(true);
+  const ys = useRef<Record<string, number>>({});
 
   const [menu, setMenu] = useState(false);
   const [plus, setPlus] = useState(false);
@@ -48,7 +49,7 @@ export default function Chat() {
   const [drafting, setDrafting] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<{ message?: string; retry: () => void } | null>(null);
+  const [error, setError] = useState<{ convId: string; text: string; action?: ChipAction; message?: string } | null>(null);
   const [flash, setFlash] = useState<"success" | "error" | null>(null);
   const [pulseKey, setPulseKey] = useState(0);
   const [draftPrefs, setDraftPrefs] = useState<QuickPrefs>({
@@ -62,9 +63,20 @@ export default function Chat() {
   const lastId = conv?.messages.at(-1)?.id;
 
   useEffect(() => {
-    setError(null);
     stick.current = true;
   }, [activeId]);
+
+  // When an answer brings results, show the start of the answer instead of jumping to the last card.
+  const last = conv?.messages.at(-1);
+  useEffect(() => {
+    if (!last || last.role !== "assistant" || !(last.attachments?.length || last.attachment)) return;
+    stick.current = false;
+    const id = setTimeout(() => {
+      const y = ys.current[last.id];
+      if (y !== undefined) scroller.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+    }, 80);
+    return () => clearTimeout(id);
+  }, [last]);
 
   const flashFor = (f: "success" | "error") => {
     setFlash(f);
@@ -81,7 +93,9 @@ export default function Chat() {
         flashFor("success");
       } catch (e) {
         flashFor("error");
-        setError({ message: e instanceof ApiError ? e.message : undefined, retry: () => ask(id, text, action) });
+        // A signed-out or expired session: the message stays in the conversation; sign in again to continue.
+        if (e instanceof ApiError && e.status === 401) router.replace("/welcome");
+        setError({ convId: id, text, action, message: e instanceof ApiError ? e.message : undefined });
       } finally {
         setPending(false);
       }
@@ -174,20 +188,18 @@ export default function Chat() {
               if (stick.current) scroller.current?.scrollToEnd({ animated: true });
             }}
           >
-            {conv!.messages.map((m) =>
-              m.role === "user" ? (
-                <UserMessage key={m.id} m={m} />
-              ) : (
-                <AssistantMessage key={m.id} m={m} conversationId={conv!.id} showChips={m.id === lastId && !pending} onChip={onChip} />
-              ),
-            )}
+            {conv!.messages.map((m) => (
+              <View key={m.id} onLayout={(e) => (ys.current[m.id] = e.nativeEvent.layout.y)}>
+                {m.role === "user" ? <UserMessage m={m} /> : <AssistantMessage m={m} conversationId={conv!.id} showChips={m.id === lastId && !pending} onChip={onChip} />}
+              </View>
+            ))}
             {pending ? <Thinking label={L("Pyrius is thinking", "Pyrius réfléchit")} /> : null}
-            {error ? (
+            {error && error.convId === conv!.id ? (
               <ErrorRow
                 text={L("Pyrius couldn't answer that", "Pyrius n'a pas pu répondre")}
                 hint={error.message ?? L("Nothing was lost. Try again when you're ready.", "Rien n'est perdu. Réessayez quand vous voulez.")}
                 retryLabel={L("Try again", "Réessayer")}
-                onRetry={error.retry}
+                onRetry={() => ask(error.convId, error.text, error.action)}
               />
             ) : null}
           </ScrollView>

@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import { AndroidImportance } from "expo-notifications";
 import { router } from "expo-router";
 import { ArrowDown } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -64,7 +65,7 @@ export default function Alerts() {
     setBusy(true);
     try {
       if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("price-alerts", { name: L("Price alerts", "Alertes de prix"), importance: Notifications.AndroidImportance.DEFAULT });
+        await Notifications.setNotificationChannelAsync("price-alerts", { name: L("Price alerts", "Alertes de prix"), importance: AndroidImportance.DEFAULT });
       }
       const { granted } = await Notifications.requestPermissionsAsync();
       updateSettings({ notifications: { ...settings.notifications, priceAlerts: granted } });

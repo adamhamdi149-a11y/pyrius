@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { searchAirports, type WorldAirport } from "@/lib/data/world";
 import { useStore } from "~/lib/store";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 import { Sheet } from "./Sheet";
 import { T, useAccent } from "./ui";
 
@@ -49,6 +49,6 @@ export function AirportPicker({ open, onClose, onPick, title }: { open: boolean;
 
 const s = StyleSheet.create({
   search: { height: 50, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14 },
-  input: { flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 16, height: "100%" },
+  input: { ...noOutline, flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 16, height: "100%" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 8, borderRadius: radii.md },
 });

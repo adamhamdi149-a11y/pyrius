@@ -104,7 +104,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const repo = useRef<Repository>(new DeviceRepository());
   // Voice transcripts and tool results arrive asynchronously; they read the latest conversations here.
   const convRef = useRef<Conversation[]>([]);
-  convRef.current = conversations;
+  useEffect(() => {
+    convRef.current = conversations;
+  }, [conversations]);
 
   const persist = useCallback((fn: (r: Repository) => Promise<void>) => {
     fn(repo.current).then(
@@ -130,6 +132,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDED_KEY).then((v) => setOnboardedState(v === "1"), () => {});
     if (!supabase) {
+      // hydrate() only sets state after loading from storage, never synchronously here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       hydrate(new DeviceRepository());
       return;
     }
@@ -238,7 +242,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
   const updateSettings = useCallback(
     (patch: Partial<UserSettings>) => {
       const next = { ...settingsRef.current, ...patch };

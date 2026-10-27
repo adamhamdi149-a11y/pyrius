@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowUp, Keyboard, Mic, MicOff, Plus, SlidersHorizontal, X } from "lucide-react-native";
+import { ArrowUp, Keyboard, Mic, MicOff, SlidersHorizontal, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
@@ -13,7 +13,7 @@ import { VoiceOptions } from "~/components/VoiceOptions";
 import { IconButton, PrimaryButton, T, tap } from "~/components/ui";
 import { useKeyboardPadding } from "~/lib/keyboard";
 import { useStore } from "~/lib/store";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 import { useVoice } from "~/lib/voice/useVoice";
 
 function MiniFlight({ o }: { o: FlightOffer }) {
@@ -166,7 +166,6 @@ export default function VoiceScreen() {
 
         <View style={s.bar}>
           <View style={s.ask}>
-            <Plus color={colors.text2} size={20} strokeWidth={1.8} />
             <TextInput
               value={text}
               onChangeText={setText}
@@ -232,8 +231,8 @@ const s = StyleSheet.create({
   problem: { marginHorizontal: 20, padding: 18, gap: 14, borderRadius: radii.xl, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft },
   mini: { width: 150, padding: 12, gap: 4, borderRadius: radii.lg, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft },
   bar: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16 },
-  ask: { flex: 1, height: 58, borderRadius: radii.pill, backgroundColor: colors.surface2, flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 18, paddingRight: 8 },
-  askInput: { flex: 1, height: "100%", color: colors.text, fontFamily: fonts.regular, fontSize: 16 },
+  ask: { flex: 1, height: 58, borderRadius: radii.pill, backgroundColor: colors.surface2, flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 22, paddingRight: 8 },
+  askInput: { ...noOutline, flex: 1, height: "100%", color: colors.text, fontFamily: fonts.regular, fontSize: 16 },
   askSend: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
   circle: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center" },
 });

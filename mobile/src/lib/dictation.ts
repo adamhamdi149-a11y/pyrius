@@ -94,7 +94,9 @@ export function useDictation(onText: (text: string) => void) {
     },
     [state, recorder, settings.locale, onText, L],
   );
-  stopRef.current = stop;
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
   // Never leave the microphone on when the composer goes away.
   useEffect(() => () => clear(), []);

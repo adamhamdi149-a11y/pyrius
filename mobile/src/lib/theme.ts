@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { orbThemeById, type OrbThemeId } from "@/lib/orbThemes";
 
 /** Pyrius design tokens for the app, mirrored from the web app's src/styles/tokens.css (dark theme). */
@@ -50,3 +51,6 @@ export const radii = { xs: 8, sm: 10, md: 12, lg: 16, xl: 20, xxl: 24, pill: 999
 
 /** Side gutter of every screen. */
 export const GUTTER = 24;
+
+/** Text fields draw their own focus state; the browser outline only appears in the web preview. */
+export const noOutline = Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "none" } as object) : {};

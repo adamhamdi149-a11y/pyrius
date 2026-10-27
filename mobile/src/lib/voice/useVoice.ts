@@ -55,51 +55,8 @@ export function useVoice() {
     engine.append(id, { role: "assistant", text, attachments, via: "voice" });
   };
 
-  // The engines call these; a ref keeps them reading the latest state without restarting the session.
   const handlers = useRef<VoiceCallbacks>(null as unknown as VoiceCallbacks);
-  handlers.current = {
-    onStatus: (s) => setStatus((prev) => (prev === "ended" || prev === "error" ? prev : s)),
-    onUserSpeaking: setUserSpeaking,
-    onLevels: (input, output) => {
-      levels.current.input = mutedRef.current ? 0 : input;
-      levels.current.output = output;
-    },
-    onTranscript: (line) => {
-      setCaptions((c) => ({ ...c, [line.role]: line }));
-      if (!line.final || line.persisted || !line.text) return;
-      const id = convId.current;
-      if (!id) return;
-      if (line.role === "user") engine.append(id, { role: "user", text: line.text, via: line.typed ? undefined : "voice" });
-      else flushAttachments(line.text);
-    },
-    onToolCall: async (call) => {
-      const c = conversation();
-      if (!c) return JSON.stringify({ ok: false, error: "No conversation" });
-      try {
-        const r = await api<ToolResult>("/api/voice/tool", { name: call.name, arguments: call.arguments, ...engine.basePayload(c) });
-        engine.patch(c.id, { prefs: r.prefs, stage: r.stage, title: r.title ?? c.title });
-        for (const a of r.attachments ?? []) pending.current = [...pending.current.filter((x) => x.type !== a.type), a];
-        if (r.actions?.length) engine.applyActions(r.actions, store.getConversation(c.id) ?? c);
-        return JSON.stringify(r.output);
-      } catch (e) {
-        return JSON.stringify({ ok: false, error: e instanceof ApiError ? e.message : "The action couldn't be completed. Tell the user and offer to try again." });
-      }
-    },
-    onError: (message, kind) => {
-      if (kind === "server") {
-        toast({ tone: "error", title: message });
-        return;
-      }
-      current.current?.stop();
-      current.current = null;
-      setProblem({ message, kind });
-      setStatus("error");
-    },
-    onEnded: (reason) => {
-      stop();
-      setEnded(reason);
-    },
-  };
+
   const proxy: VoiceCallbacks = useMemo(
     () => ({
       onStatus: (s) => handlers.current.onStatus(s),
@@ -197,6 +154,54 @@ export function useVoice() {
       stop();
     };
   }, [stop]);
+
+  // The engines call these; a ref keeps them reading the latest state without restarting the session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshed after every render on purpose
+  useEffect(() => {
+    handlers.current = {
+      onStatus: (s) => setStatus((prev) => (prev === "ended" || prev === "error" ? prev : s)),
+      onUserSpeaking: setUserSpeaking,
+      onLevels: (input, output) => {
+        levels.current.input = mutedRef.current ? 0 : input;
+        levels.current.output = output;
+      },
+      onTranscript: (line) => {
+        setCaptions((c) => ({ ...c, [line.role]: line }));
+        if (!line.final || line.persisted || !line.text) return;
+        const id = convId.current;
+        if (!id) return;
+        if (line.role === "user") engine.append(id, { role: "user", text: line.text, via: line.typed ? undefined : "voice" });
+        else flushAttachments(line.text);
+      },
+      onToolCall: async (call) => {
+        const c = conversation();
+        if (!c) return JSON.stringify({ ok: false, error: "No conversation" });
+        try {
+          const r = await api<ToolResult>("/api/voice/tool", { name: call.name, arguments: call.arguments, ...engine.basePayload(c) });
+          engine.patch(c.id, { prefs: r.prefs, stage: r.stage, title: r.title ?? c.title });
+          for (const a of r.attachments ?? []) pending.current = [...pending.current.filter((x) => x.type !== a.type), a];
+          if (r.actions?.length) engine.applyActions(r.actions, store.getConversation(c.id) ?? c);
+          return JSON.stringify(r.output);
+        } catch (e) {
+          return JSON.stringify({ ok: false, error: e instanceof ApiError ? e.message : "The action couldn't be completed. Tell the user and offer to try again." });
+        }
+      },
+      onError: (message, kind) => {
+        if (kind === "server") {
+          toast({ tone: "error", title: message });
+          return;
+        }
+        current.current?.stop();
+        current.current = null;
+        setProblem({ message, kind });
+        setStatus("error");
+      },
+      onEnded: (reason) => {
+        stop();
+        setEnded(reason);
+      },
+    };
+  });
 
   const setMuted = (m: boolean) => {
     mutedRef.current = m;

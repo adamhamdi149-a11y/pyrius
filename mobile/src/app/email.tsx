@@ -10,7 +10,7 @@ import { isEmail, sendEmailCode, signInWithProvider } from "~/lib/auth";
 import { API_URL } from "~/lib/config";
 import { useStore } from "~/lib/store";
 import { enabledProviders } from "~/lib/supabase";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 
 export default function Email() {
   const { L, onboarded } = useStore();
@@ -124,7 +124,7 @@ export default function Email() {
 }
 
 const s = StyleSheet.create({
-  field: { height: 58, paddingHorizontal: 20, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg2, color: colors.text, fontFamily: fonts.regular, fontSize: 17 },
+  field: { ...noOutline, height: 58, paddingHorizontal: 20, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg2, color: colors.text, fontFamily: fonts.regular, fontSize: 17 },
   or: { flexDirection: "row", alignItems: "center", gap: 14, marginVertical: 8 },
   rule: { flex: 1, height: 1, backgroundColor: colors.borderSoft },
   legal: { textAlign: "center", fontSize: 12, lineHeight: 18, color: colors.text3, marginTop: 8 },

@@ -8,7 +8,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Conversation } from "@/lib/types";
 import { useStore } from "~/lib/store";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 import { MiniOrb } from "./MiniOrb";
 import { IconButton, T, tap, useAccent } from "./ui";
 
@@ -36,21 +36,23 @@ export function Drawer({ open, onClose, onNew }: { open: boolean; onClose: () =>
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
 
+  // Opening mounts the panel right away; closing keeps it until the slide-out ends.
+  if (open && !mounted) setMounted(true);
+
   useEffect(() => {
-    if (open) setMounted(true);
-    x.value = withTiming(open ? 0 : -panel, { duration: open ? 420 : 260, easing: EASE }, (done) => {
+    x.set(withTiming(open ? 0 : -panel, { duration: open ? 420 : 260, easing: EASE }, (done) => {
       if (done && !open) scheduleOnRN(setMounted, false);
-    });
+    }));
   }, [open, panel, x]);
 
   const pan = Gesture.Pan()
     .activeOffsetX([-12, 12])
     .onUpdate((e) => {
-      x.value = Math.min(0, e.translationX);
+      x.set(Math.min(0, e.translationX));
     })
     .onEnd((e) => {
       if (e.translationX < -panel * 0.3 || e.velocityX < -600) scheduleOnRN(onClose);
-      else x.value = withTiming(0, { duration: 220, easing: EASE });
+      else x.set(withTiming(0, { duration: 220, easing: EASE }));
     });
 
   const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
@@ -81,7 +83,7 @@ export function Drawer({ open, onClose, onNew }: { open: boolean; onClose: () =>
   const email = auth.mode === "cloud" ? auth.email : undefined;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={open ? "auto" : "none"}>
+    <View style={[StyleSheet.absoluteFill, { zIndex: 20, elevation: 20 }]} pointerEvents={open ? "auto" : "none"}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, shade]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={L("Close menu", "Fermer le menu")} />
       </Animated.View>
@@ -168,7 +170,7 @@ const s = StyleSheet.create({
   panel: { position: "absolute", top: 0, bottom: 0, left: 0, backgroundColor: colors.sidebar, borderRightWidth: 1, borderColor: colors.borderSoft, paddingHorizontal: 14 },
   brandRow: { height: 48, flexDirection: "row", alignItems: "center", paddingLeft: 10 },
   search: { flex: 1, height: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 12, borderRadius: radii.pill, backgroundColor: colors.surface },
-  searchInput: { flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 15, height: "100%" },
+  searchInput: { ...noOutline, flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 15, height: "100%" },
   item: { flexDirection: "row", alignItems: "center", gap: 14, height: 50, paddingHorizontal: 12, borderRadius: radii.md },
   itemText: { fontSize: 16 },
   pressed: { backgroundColor: colors.surface },

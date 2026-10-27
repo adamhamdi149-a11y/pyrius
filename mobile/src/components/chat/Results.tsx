@@ -120,7 +120,7 @@ export function FlightCard({ offer, best, conversationId, index }: { offer: Flig
           </Pressable>
         )}
       </View>
-      {live ? <BookingSheet offer={offer} open={booking} onClose={() => setBooking(false)} /> : null}
+      {live && booking ? <BookingSheet offer={offer} open onClose={() => setBooking(false)} /> : null}
     </Animated.View>
   );
 }

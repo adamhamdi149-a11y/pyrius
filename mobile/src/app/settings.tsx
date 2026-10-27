@@ -13,7 +13,7 @@ import { ThemePicker } from "~/components/ThemePicker";
 import { VoiceOptions } from "~/components/VoiceOptions";
 import { T, tap, useAccent } from "~/components/ui";
 import { useStore } from "~/lib/store";
-import { colors, fonts, radii } from "~/lib/theme";
+import { colors, fonts, radii, noOutline } from "~/lib/theme";
 
 
 function Row({ label, value, onPress, right, sub }: { label: string; value?: string; onPress?: () => void; right?: ReactNode; sub?: string }) {
@@ -188,7 +188,7 @@ export default function Settings() {
 
 const s = StyleSheet.create({
   row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  input: { flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 16, textAlign: "right", paddingVertical: 4 },
+  input: { ...noOutline, flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 16, textAlign: "right", paddingVertical: 4 },
   segments: { flexDirection: "row", gap: 8 },
   segment: { flex: 1, height: 40, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
 });
