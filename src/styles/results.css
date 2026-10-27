@@ -677,7 +677,31 @@
 .hcard__loc svg {
   width: 13px;
   height: 13px;
+  flex: none;
   color: var(--text-3);
+}
+
+.hcard__loc > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hcard__site {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-hi);
+}
+
+.hcard__site:hover {
+  text-decoration: underline;
+}
+
+.hcard__site svg {
+  width: 12px;
+  height: 12px;
 }
 
 .hcard__desc {
@@ -858,13 +882,93 @@
 }
 
 .bcard__body {
+  display: grid;
+  gap: 3px;
   flex: 1;
-  min-width: 180px;
+  min-width: 200px;
+}
+
+.bcard__img {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.bcard__name {
+  overflow-wrap: anywhere;
+}
+
+.bcard__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.bcard__facts > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bcard__facts svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-3);
+}
+
+.bcard__rating {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bcard__rating svg {
+  color: #f5b941;
+  fill: #f5b941;
+}
+
+.bcard__rating small {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.bcard__addr {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.bcard__addr svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-top: 3px;
 }
 
 .bcard__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .bcard__actions {
+    width: 100%;
+  }
+
+  .bcard__actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.notice--soft {
+  font-size: var(--fs-sm);
+  margin-bottom: 4px;
 }
 
 .directory-empty {

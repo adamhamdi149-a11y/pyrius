@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { allow, type RateWindows } from "@/lib/ai/concierge/rateLimit";
 import { isAirportCode } from "@/lib/data/world";
+import { travelersProblem } from "@/lib/flights/workflow";
 import { getUserFromRequest } from "@/lib/supabase/server";
-import type { FlightSearchParams } from "@/lib/types";
+import type { BusinessCategory, FlightSearchParams, HotelSearchParams } from "@/lib/types";
 
 /**
  * Requests that spend paid quota (AI, live flight searches, booking lookups) need a signed-in
@@ -30,7 +31,9 @@ export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
   const p = (v && typeof v === "object" ? v : {}) as Partial<FlightSearchParams>;
   if (!isAirportCode(p.originCode) || !isAirportCode(p.destinationCode)) return undefined;
   if (p.originCode === p.destinationCode || !isDate(p.departDate)) return undefined;
-  const returnDate = isDate(p.returnDate) && p.returnDate > p.departDate ? p.returnDate : undefined;
+  const returnDate = isDate(p.returnDate) && p.returnDate >= p.departDate ? p.returnDate : undefined;
+  const pax = { adults: intIn(p.adults, 1, 9) ?? 1, children: intIn(p.children, 0, 8) ?? 0, infants: intIn(p.infants, 0, 8) ?? 0 };
+  if (travelersProblem(pax)) return undefined;
   return {
     originCode: p.originCode,
     destinationCode: p.destinationCode,
@@ -38,7 +41,27 @@ export function cleanFlightParams(v: unknown): FlightSearchParams | undefined {
     returnDate,
     adults: intIn(p.adults, 1, 9) ?? 1,
     children: intIn(p.children, 0, 8) ?? 0,
+    infants: intIn(p.infants, 1, 8),
+    cabin: p.cabin === "premium_economy" || p.cabin === "business" || p.cabin === "first" ? p.cabin : undefined,
     currency: p.currency === "USD" || p.currency === "EUR" ? p.currency : "CAD",
     nonstopOnly: p.nonstopOnly === true || undefined,
   };
 }
+
+/** Hotel search parameters from the browser, checked field by field. */
+export function cleanHotelParams(v: unknown): HotelSearchParams | undefined {
+  const p = (v && typeof v === "object" ? v : {}) as Partial<HotelSearchParams>;
+  if (!isAirportCode(p.destinationCode) || !isDate(p.checkIn) || !isDate(p.checkOut) || p.checkOut <= p.checkIn) return undefined;
+  return {
+    destinationCode: p.destinationCode,
+    checkIn: p.checkIn,
+    checkOut: p.checkOut,
+    guests: intIn(p.guests, 1, 17) ?? 1,
+    rooms: intIn(p.rooms, 1, 9) ?? 1,
+    currency: p.currency === "USD" || p.currency === "EUR" ? p.currency : "CAD",
+    stayType: p.stayType === "apartment" ? "apartment" : "hotel",
+  };
+}
+
+export const BUSINESS_CATEGORIES: BusinessCategory[] = ["Car rental agency", "Car dealership", "Private jet charter", "Yacht charter"];
+export const isBusinessCategory = (v: unknown): v is BusinessCategory => BUSINESS_CATEGORIES.includes(v as BusinessCategory);

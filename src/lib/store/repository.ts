@@ -20,6 +20,8 @@ export interface Repository {
   removeSaved(id: string): Promise<void>;
   putTracker(t: PriceTracker): Promise<void>;
   removeTracker(id: string): Promise<void>;
+  /** Cloud only: trackers as stored now, including prices checked on other devices. */
+  loadTrackers?(): Promise<PriceTracker[]>;
   putSettings(s: UserSettings): Promise<void>;
   /** Demo-only: local plan preview. Cloud plans change only through the Stripe webhook. */
   putSubscription?(s: Subscription): Promise<void>;
@@ -134,6 +136,11 @@ export class SupabaseRepository implements Repository {
   }
   async removeTracker(id: string) {
     this.check(await this.db.from("price_trackers").delete().eq("id", id));
+  }
+  async loadTrackers() {
+    const res = await this.db.from("price_trackers").select("data").order("created_at", { ascending: false });
+    this.check(res);
+    return (res.data ?? []).map((r) => r.data as PriceTracker);
   }
   async putSettings(s: UserSettings) {
     this.check(await this.db.from("user_settings").upsert({ user_id: this.userId, data: s, updated_at: new Date().toISOString() }));

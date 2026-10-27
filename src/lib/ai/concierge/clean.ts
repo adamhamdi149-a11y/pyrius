@@ -1,8 +1,9 @@
 import { cleanFlightParams } from "@/lib/apiGate";
 import { isAirportCode } from "@/lib/data/world";
 import type { FlightBrief } from "@/lib/flights/brief";
+import type { HotelBrief } from "@/lib/hotels/brief";
 import { PLANS } from "@/lib/plans";
-import type { AgentStage, CarSearchParams, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
+import type { AgentStage, HotelSearchParams, Locale, PlanId, TripPreferences } from "@/lib/types";
 import { toISODate } from "@/lib/utils";
 import type { ConciergeRequest } from "./index";
 import type { SavedSummary } from "./tools";
@@ -21,6 +22,7 @@ export const oneOf = <T extends string>(v: unknown, list: readonly T[]) => (type
 const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
 export const code = (v: unknown) => (isAirportCode(v) ? v : undefined);
 
+/** The trip comes from the browser, so every field is checked before it reaches the model or a search. */
 export function cleanTrip(p: unknown): TripPreferences {
   const t = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
   const out: TripPreferences = {
@@ -43,7 +45,15 @@ export function cleanTrip(p: unknown): TripPreferences {
     stayType: oneOf(t.stayType, ["hotel", "apartment"] as const),
     stayBudgetPerNight: numIn(t.stayBudgetPerNight, 0, 20000),
     carMode: oneOf(t.carMode, ["rental", "agencies", "dealerships"] as const),
-    tripType: oneOf(t.tripType, ["round", "oneway"] as const),
+    infants: intIn(t.infants, 0, 8),
+    tripType: oneOf(t.tripType, ["round", "oneway", "multi"] as const),
+    legs: Array.isArray(t.legs)
+      ? (t.legs as Record<string, unknown>[]).slice(0, 5).map((l) => ({ from: code(l?.from), to: code(l?.to), date: isDate(l?.date) ? (l.date as string) : undefined }))
+      : undefined,
+    originQuery: typeof t.originQuery === "string" ? t.originQuery.slice(0, 60) : undefined,
+    destinationQuery: typeof t.destinationQuery === "string" ? t.destinationQuery.slice(0, 60) : undefined,
+    calendarMonth: typeof t.calendarMonth === "string" && /^\d{4}-\d{2}$/.test(t.calendarMonth) ? t.calendarMonth : undefined,
+    confirmed: t.confirmed && typeof t.confirmed === "object" ? { tripType: bool((t.confirmed as Record<string, unknown>).tripType), travelers: bool((t.confirmed as Record<string, unknown>).travelers), cabin: bool((t.confirmed as Record<string, unknown>).cabin) } : undefined,
     cabin: oneOf(t.cabin, ["economy", "premium_economy", "business", "first"] as const),
     departureTime: oneOf(t.departureTime, ["morning", "afternoon", "evening"] as const),
     notes: typeof t.notes === "string" ? t.notes.slice(0, 200) : undefined,
@@ -90,7 +100,7 @@ export function cleanFlights(v: unknown): ConciergeRequest["results"]["flights"]
   };
 }
 
-export function cleanHotels(v: unknown): HotelSearchParams | undefined {
+export function cleanHotelParams(v: unknown): HotelSearchParams | undefined {
   const h = v as Partial<HotelSearchParams> | undefined;
   if (!h || !code(h.destinationCode) || !isDate(h.checkIn) || !isDate(h.checkOut)) return undefined;
   return {
@@ -104,15 +114,37 @@ export function cleanHotels(v: unknown): HotelSearchParams | undefined {
   };
 }
 
-export function cleanCars(v: unknown): CarSearchParams | undefined {
-  const c = v as Partial<CarSearchParams> | undefined;
-  if (!c || !code(c.destinationCode) || !isDate(c.pickUp) || !isDate(c.dropOff)) return undefined;
-  return { destinationCode: c.destinationCode!, pickUp: c.pickUp, dropOff: c.dropOff, currency: oneOf(c.currency, ["CAD", "USD", "EUR"] as const) ?? "CAD" };
+/** The stay cards on screen: text and numbers only, bounded, never instructions. */
+export function cleanHotels(v: unknown): ConciergeRequest["results"]["hotels"] {
+  const h = v as { params?: unknown; shown?: unknown[] } | undefined;
+  const params = cleanHotelParams(h?.params);
+  if (!params) return undefined;
+  const str = (x: unknown, n = 160) => (typeof x === "string" ? x.slice(0, n) : "");
+  const shown: HotelBrief[] = (Array.isArray(h!.shown) ? h!.shown : []).slice(0, 24).flatMap((raw, i) => {
+    const b = raw as Record<string, unknown>;
+    if (!b || typeof b.id !== "string" || !/^[\w-]{3,80}$/.test(b.id)) return [];
+    return [{
+      n: i + 1,
+      id: b.id,
+      name: str(b.name, 120),
+      type: str(b.type, 30),
+      stars: intIn(b.stars, 0, 5) ?? 0,
+      rating: numIn(b.rating, 0, 10) ?? null,
+      reviews: intIn(b.reviews, 0, 10_000_000) ?? null,
+      per_night: numIn(b.per_night, 0, 1_000_000) ?? 0,
+      total: numIn(b.total, 0, 10_000_000) ?? 0,
+      nights: intIn(b.nights, 1, 400) ?? 1,
+      currency: str(b.currency, 3) || "CAD",
+      amenities: (Array.isArray(b.amenities) ? b.amenities : []).slice(0, 6).map((a) => str(a, 40)),
+      address: typeof b.address === "string" ? str(b.address) : null,
+    }];
+  });
+  return { params, shown };
 }
 
 export function cleanResults(v: unknown): ConciergeRequest["results"] {
   const r = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
-  return { flights: cleanFlights(r.flights), hotels: cleanHotels(r.hotels), cars: cleanCars(r.cars) };
+  return { flights: cleanFlights(r.flights), hotels: cleanHotels(r.hotels) };
 }
 
 export function cleanHistory(v: unknown): ConciergeRequest["history"] {

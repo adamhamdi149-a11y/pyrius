@@ -10,6 +10,7 @@ import "@/styles/base.css";
 import "@/styles/shell.css";
 import "@/styles/chat.css";
 import "@/styles/results.css";
+import "@/styles/flow.css";
 import "@/styles/pages.css";
 import "@/styles/fx.css";
 import "@/styles/marketing.css";

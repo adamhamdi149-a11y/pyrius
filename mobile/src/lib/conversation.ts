@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { applyFlightFilters } from "@/lib/flights/filters";
 import { flightBrief } from "@/lib/flights/brief";
+import { hotelBrief, sortStays } from "@/lib/hotels/brief";
 import { offerTitle } from "@/lib/offers";
 import { newConversation } from "@/lib/store/defaults";
 import { messageAttachments, type AgentReply, type AgentStage, type AnyOffer, type Attachment, type ChatMessage, type ChipAction, type ClientAction, type Conversation, type TripPreferences } from "@/lib/types";
@@ -32,7 +33,6 @@ export function useConversationEngine() {
       };
       const flights = latest("flights");
       const hotels = latest("hotels");
-      const cars = latest("cars");
       const tracked = new Map(store.trackers.map((t) => [t.offerId, t]));
       const snap = flights?.snapshot;
       const shown = snap
@@ -41,8 +41,7 @@ export function useConversationEngine() {
       return {
         results: {
           flights: flights && { params: flights.params, sort: flights.filters?.sort, source: snap?.source, fetchedAt: snap?.fetchedAt, shown },
-          hotels: hotels?.params,
-          cars: cars?.params,
+          hotels: hotels && { params: hotels.params, shown: sortStays(hotels.snapshot?.offers ?? [], hotels.sort ?? "price").map((h, i) => hotelBrief(h, i + 1)) },
         },
         saved: store.saved.slice(0, 60).map((s) => ({ id: s.id, kind: s.kind, label: offerTitle(s.data), price: s.data.offer.totalPrice, currency: s.data.offer.currency, tracked: tracked.has(s.id), target: tracked.get(s.id)?.targetPrice })),
         plan: store.subscription.plan,
@@ -73,8 +72,10 @@ export function useConversationEngine() {
     (c: Conversation, id: string): AnyOffer | undefined => {
       for (let i = c.messages.length - 1; i >= 0; i--) {
         for (const a of messageAttachments(c.messages[i])) {
-          const hit = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
-          if (hit) return { kind: "flight", offer: hit };
+          const flight = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+          if (flight) return { kind: "flight", offer: flight };
+          const stay = a.type === "hotels" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+          if (stay) return { kind: "hotel", offer: stay };
         }
       }
       return store.saved.find((s) => s.id === id)?.data;

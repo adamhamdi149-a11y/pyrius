@@ -5,7 +5,7 @@ import { cleanCounts, cleanHistory, cleanLocale, cleanPlan, cleanResults, cleanS
 import { allow } from "@/lib/ai/concierge/rateLimit";
 import type { SavedSummary } from "@/lib/ai/concierge/tools";
 import { getUserFromRequest } from "@/lib/supabase/server";
-import type { AgentStage, ChipAction, Locale, PlanId, TripPreferences } from "@/lib/types";
+import type { ChipAction, Locale, PlanId, TripPreferences, AgentStage } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,11 +36,13 @@ function actionText(a: ChipAction, locale: Locale) {
     case "skip-hotels":
       return L("I don't need a place to stay.", "Je n'ai pas besoin d'hébergement.");
     case "cars":
-      return a.mode === "rental"
-        ? L("Show me rental cars for this trip.", "Montre-moi des voitures de location pour ce voyage.")
-        : a.mode === "agencies"
-          ? L("Help me find local car rental agencies.", "Aide-moi à trouver des agences de location locales.")
-          : L("Help me find car dealerships there.", "Aide-moi à trouver des concessionnaires sur place.");
+      return a.mode === "dealerships"
+        ? L("Help me find car dealerships there.", "Aide-moi à trouver des concessionnaires sur place.")
+        : L("Find car rental agencies at my destination.", "Trouve des agences de location de voitures à destination.");
+    case "charter":
+      return a.mode === "jets"
+        ? L("Find private jet charters for this trip.", "Trouve des vols en jet privé pour ce voyage.")
+        : L("Find yacht charters at my destination.", "Trouve des locations de yacht à destination.");
     case "skip-cars":
       return L("I don't need a car. That's everything for now.", "Je n'ai pas besoin de voiture. C'est tout pour le moment.");
     default:

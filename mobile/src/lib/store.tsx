@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { canAddTracker, canSave, DEFAULT_SUBSCRIPTION, planById } from "@/lib/plans";
 import { DEFAULT_SETTINGS } from "@/lib/store/defaults";
 import { SupabaseRepository, type PersistedState, type Repository } from "@/lib/store/repository";
-import { trackerFromOffer } from "@/lib/tracking/simulator";
+import { trackerFromOffer } from "@/lib/tracking/trackers";
 import type { AnyOffer, Conversation, PriceTracker, SavedOffer, Subscription, UserSettings, VoiceSettings } from "@/lib/types";
 import { supabaseConfigured } from "./config";
 import { supabase } from "./supabase";

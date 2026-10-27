@@ -4,7 +4,8 @@ import { translate, type MessageKey } from "@/lib/i18n";
 import { canAddTracker, canSave, DEFAULT_SUBSCRIPTION, planById } from "@/lib/plans";
 import { orbThemeById } from "@/lib/orbThemes";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
-import { simulateCheck, trackerFromOffer } from "@/lib/tracking/simulator";
+import { authHeaders } from "@/lib/authHeaders";
+import { applyCheck, trackerFromOffer, type CheckResult } from "@/lib/tracking/trackers";
 import type { AnyOffer, Conversation, PlanId, PriceTracker, SavedOffer, Subscription, UserSettings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { LocalRepository, SupabaseRepository, type PersistedState, type Repository } from "./repository";
@@ -17,6 +18,9 @@ export type AuthState =
   | { mode: "cloud"; userId: string; email?: string };
 
 type Result = { ok: true } | { ok: false; reason: "limit" | "error"; message: string };
+
+/** One "Check now": today's price, or that the offer isn't sold any more, or why it couldn't be checked. */
+export type CheckOutcome = { price?: number; reached?: boolean; unavailable?: boolean; failed?: boolean; message?: string };
 
 interface Store {
   ready: boolean;
@@ -40,7 +44,8 @@ interface Store {
   startTracking: (o: AnyOffer, target: number, conversationId?: string) => Result;
   updateTracker: (id: string, patch: Partial<Pick<PriceTracker, "targetPrice" | "status">>) => void;
   stopTracking: (id: string) => void;
-  runSimulatedCheck: (id?: string) => number;
+  checkNow: (id: string) => Promise<CheckOutcome>;
+  refreshTrackers: () => Promise<void>;
   updateSettings: (patch: Partial<UserSettings>) => void;
   setDemoPlan: (plan: PlanId) => void;
   clearLocalData: () => Promise<void>;
@@ -97,8 +102,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const s = { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) };
     setSettings(s);
     setConversations((data.conversations ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-    setSaved(data.saved ?? []);
-    setTrackers(data.trackers ?? []);
+    // Pyrius shows only real offers now; examples saved by earlier versions stay stored but out of sight.
+    setSaved((data.saved ?? []).filter((s) => s.data.offer.source !== "demo"));
+    setTrackers((data.trackers ?? []).filter((t) => t.source !== "demo"));
     setSubscription(data.subscription ?? DEFAULT_SUBSCRIPTION);
     applyTheme(s.theme);
     applyAccent(s.orbTheme);
@@ -239,18 +245,43 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const runSimulatedCheck = useCallback(
-    (id?: string) => {
-      const now = new Date();
-      // Simulated checks only ever touch demo offers; live fares are never given made-up prices.
-      const targets = trackers.filter((x) => x.source === "demo" && (id ? x.id === id : x.status !== "paused"));
-      const updated = targets.map((x) => simulateCheck(x, now));
-      setTrackers((list) => list.map((x) => updated.find((u) => u.id === x.id) ?? x));
-      updated.forEach((u) => persist((r) => r.putTracker(u)));
-      return updated.filter((u) => u.status === "target-reached").length;
+  // Looks the offer up again with its live provider and records the real price on the tracker.
+  const checkNow = useCallback(
+    async (id: string): Promise<CheckOutcome> => {
+      const t = trackers.find((x) => x.id === id);
+      const offer = saved.find((s) => s.id === t?.offerId)?.data;
+      if (!t || !offer || offer.offer.source !== "live") return { failed: true, message: "This offer can't be checked." };
+      try {
+        const res = await fetch("/api/tracking/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ kind: offer.kind, offer: offer.offer }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return { failed: true, message: body.error };
+        const next = applyCheck(t, body as CheckResult);
+        setTrackers((list) => list.map((x) => (x.id === id ? next : x)));
+        persist((r) => r.putTracker(next));
+        return body.available ? { price: next.lastKnownPrice, reached: next.status === "target-reached" } : { unavailable: true };
+      } catch {
+        return { failed: true };
+      }
     },
-    [persist, trackers],
+    [persist, saved, trackers],
   );
+
+  const refreshTrackers = useCallback(async () => {
+    const list = await repo.current.loadTrackers?.().catch(() => null);
+    if (list) setTrackers(list.filter((t) => t.source !== "demo"));
+  }, []);
+
+  // Prices checked on another device show up when the app is back in view.
+  useEffect(() => {
+    if (auth.mode !== "cloud") return;
+    const on = () => document.visibilityState === "visible" && refreshTrackers();
+    document.addEventListener("visibilitychange", on);
+    return () => document.removeEventListener("visibilitychange", on);
+  }, [auth.mode, refreshTrackers]);
 
   const updateSettings = useCallback(
     (patch: Partial<UserSettings>) => {
@@ -301,7 +332,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     startTracking,
     updateTracker,
     stopTracking,
-    runSimulatedCheck,
+    checkNow,
+    refreshTrackers,
     updateSettings,
     setDemoPlan,
     clearLocalData,

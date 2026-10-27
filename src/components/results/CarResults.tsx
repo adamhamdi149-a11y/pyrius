@@ -1,164 +1,84 @@
 "use client";
-import { Briefcase, Building2, Car, CheckCircle2, ExternalLink, Globe, MapPin, Navigation, Phone, RotateCcw, Settings2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
-import { DemoBadge, EmptyState, Skeleton, SmartImage } from "@/components/ui/primitives";
+import { Anchor, Building2, Car, Clock, ExternalLink, Globe, MapPin, Navigation, Phone, Plane, RotateCcw, Star } from "lucide-react";
+import { DemoBadge, Skeleton, SmartImage } from "@/components/ui/primitives";
 import { findAirport } from "@/lib/data/world";
 import { useStore } from "@/lib/store/AppStore";
-import type { Attachment, CarOffer, LocalBusiness, LocalBusinessResult } from "@/lib/types";
+import type { Attachment, BusinessCategory, LocalBusiness, LocalBusinessResult } from "@/lib/types";
 import { useSearch } from "@/lib/useSearch";
-import { formatRange, money } from "@/lib/utils";
-import { SearchSummary } from "./FlightResults";
-import { Price } from "@/components/ui/Price";
 import { stagger } from "@/lib/motion";
-import { OfferActions } from "./OfferActions";
-import { SearchProgress, SourceLine } from "./SearchProgress";
+import { SourceLine } from "./SearchProgress";
 
 type CarAttachment = Extract<Attachment, { type: "cars" }>;
 type BizAttachment = Extract<Attachment, { type: "businesses" }>;
 
-export function CarCard({ c, conversationId, onSaved, locale, index = 0 }: { c: CarOffer; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void; locale: string; index?: number }) {
-  return (
-    <article className="ccard" data-glow style={stagger(index)}>
-      <SmartImage src={c.image} alt={`${c.category} car — representative photo`} className="ccard__img" ratio="16 / 10" sizes="(max-width: 900px) 100vw, 440px" />
-      <div className="ccard__body">
-        <div className="ccard__head">
-          <div>
-            <div className="t-eyebrow">{c.category}</div>
-            <h3 className="ccard__name">{c.example}</h3>
-          </div>
-          <span className="ccard__supplier">{c.supplier}</span>
-        </div>
-        <div className="ccard__specs">
-          <span>
-            <Users />
-            {c.seats}
-          </span>
-          <span>
-            <Briefcase />
-            {c.bags}
-          </span>
-          <span>
-            <Settings2 />
-            {c.transmission}
-          </span>
-        </div>
-        <div className="ccard__where">
-          <MapPin />
-          <span>
-            {c.pickupLocation}
-            <span className="t-meta"> · {formatRange(c.pickUp, c.dropOff, locale)}</span>
-          </span>
-        </div>
-        <ul className="ccard__conds">
-          {c.conditions.slice(0, 2).map((x) => (
-            <li key={x}>
-              <CheckCircle2 />
-              {x}
-            </li>
-          ))}
-        </ul>
-        <div className="ccard__price">
-          <Price amount={c.totalPrice} currency={c.currency} locale={locale} />
-          <span className="t-meta num">
-            est. total · {c.days} day{c.days > 1 ? "s" : ""}
-          </span>
-        </div>
-        <OfferActions offer={{ kind: "car", offer: c }} conversationId={conversationId} onSaved={onSaved} compact />
-      </div>
-    </article>
-  );
-}
+const COPY: Record<BusinessCategory, { title: string; noun: string; icon: typeof Car; fine: string }> = {
+  "Car rental agency": {
+    title: "Car rental agencies",
+    noun: "agencies",
+    icon: Car,
+    fine: "Real agencies listed on Google Maps, with their Google rating. Rental prices aren't published in a form Pyrius can read: each agency quotes on its website or by phone, so compare two or three before you book.",
+  },
+  "Car dealership": {
+    title: "Car dealerships",
+    noun: "dealerships",
+    icon: Building2,
+    fine: "Real dealerships listed on Google Maps, with their Google rating. Dealers publish their stock and prices on their own websites. For a short trip, a rental agency is usually what you need.",
+  },
+  "Private jet charter": {
+    title: "Private jet charters",
+    noun: "operators",
+    icon: Plane,
+    fine: "Real charter operators and brokers listed on Google Maps near this airport. Charter prices depend on the aircraft, route and dates and are quoted by each operator. Ask Pyrius for published empty-leg deals: it searches the web and links each source.",
+  },
+  "Yacht charter": {
+    title: "Yacht charters",
+    noun: "charters",
+    icon: Anchor,
+    fine: "Real yacht and boat charter companies listed on Google Maps. Prices depend on the boat, season and crew and are quoted by each company. Ask Pyrius for published charter deals: it searches the web and links each source.",
+  },
+};
 
-export function CarResults({ attachment, conversationId, onSaved }: { attachment: CarAttachment; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void }) {
-  const { settings } = useStore();
-  const locale = settings.locale;
-  const res = useSearch<{ offers: CarOffer[] }>("cars", attachment.params);
-  const [cat, setCat] = useState("all");
-  const offers = res.status === "ok" ? res.data.offers : [];
-  const cats = useMemo(() => [...new Set(offers.map((c) => c.category))], [offers]);
-  const list = offers.filter((c) => cat === "all" || c.category === cat);
-  const p = attachment.params;
-  const d = findAirport(p.destinationCode);
-
+/** A real business from Google Maps. Pyrius has no partnership with any listed business. */
+export function LocalBusinessCard({ b, index = 0, locale }: { b: LocalBusiness; index?: number; locale: string }) {
+  const Icon = COPY[b.category].icon;
   return (
-    <section className="results" aria-label="Rental car results">
-      <SearchSummary kind="Rental cars" to={`${d?.city ?? p.destinationCode} airport`} dates={formatRange(p.pickUp, p.dropOff, locale)} people="Pick-up & return" currency={p.currency} />
-      {res.status === "loading" && (
-        <SearchProgress what="rental cars">
-          <div className="hgrid">
-            {[0, 1].map((i) => (
-              <Skeleton key={i} h={300} r={16} />
-            ))}
-          </div>
-        </SearchProgress>
-      )}
-      {res.status === "error" && (
-        <div className="results__error">
-          <span>{res.error}</span>
-          <button className="btn btn--secondary btn--sm" onClick={res.retry}>
-            <RotateCcw />
-            Try again
-          </button>
-        </div>
-      )}
-      {res.status === "ok" && (
-        <>
-          <SourceLine count={offers.length} noun="vehicles" ms={res.ms} />
-          <div className="toolbar toolbar--wrap">
-            <div className="fset__chips" role="group" aria-label="Vehicle category">
-              <button className="chip" aria-pressed={cat === "all"} onClick={() => setCat("all")}>
-                All
-              </button>
-              {cats.map((c) => (
-                <button key={c} className="chip" aria-pressed={cat === c} onClick={() => setCat(c)}>
-                  {c}
-                </button>
-              ))}
-            </div>
-            <div className="toolbar__end">
-              <span className="t-meta num">{list.length} options</span>
-            </div>
-          </div>
-          {list.length === 0 ? (
-            <EmptyState icon={<Car />} title="No cars in this category" action={<button className="btn btn--secondary" onClick={() => setCat("all")}>Show all</button>} />
-          ) : (
-            <div className="hgrid m-stagger">
-              {list.map((c, i) => (
-                <CarCard key={c.id} c={c} index={i} locale={locale} conversationId={conversationId} onSaved={onSaved} />
-              ))}
-            </div>
-          )}
-          <p className="results__fine">
-            Demonstration estimates: supplier names are shown for illustration and prices aren&apos;t quotes. Availability, deposits, insurance and final price are confirmed by the rental company when you book.
-          </p>
-        </>
-      )}
-    </section>
-  );
-}
-
-/** Renders only verified business records. Pyrius has no partnership with any listed business. */
-export function LocalBusinessCard({ b }: { b: LocalBusiness }) {
-  return (
-    <article className="bcard">
-      <div className="bcard__icon">{b.category === "Car dealership" ? <Building2 /> : <Car />}</div>
+    <article className="bcard" data-glow style={stagger(index)}>
+      {b.image ? <SmartImage src={b.image} alt="" className="bcard__img" ratio="1 / 1" /> : <div className="bcard__icon"><Icon /></div>}
       <div className="bcard__body">
-        <div className="t-eyebrow">{b.category}</div>
-        <h3 className="t-h3">{b.name}</h3>
-        <div className="t-meta">
-          {b.address}
-          {b.distanceKm !== undefined && <span className="num"> · {b.distanceKm} km</span>}
+        <div className="t-eyebrow">{b.type ?? b.category}</div>
+        <h3 className="t-h3 bcard__name">{b.name}</h3>
+        <div className="bcard__facts">
+          {b.rating !== undefined && (
+            <span className="bcard__rating num" title={`Google rating${b.reviews ? ` from ${b.reviews.toLocaleString(locale)} reviews` : ""}`}>
+              <Star />
+              {b.rating.toFixed(1)}
+              {b.reviews !== undefined && <small>({b.reviews.toLocaleString(locale)})</small>}
+            </span>
+          )}
+          {b.distanceKm !== undefined && <span className="num">{b.distanceKm} km away</span>}
+          {b.hours && (
+            <span>
+              <Clock />
+              {b.hours}
+            </span>
+          )}
         </div>
+        {b.address && (
+          <div className="t-meta bcard__addr">
+            <MapPin />
+            <span>{b.address}</span>
+          </div>
+        )}
       </div>
       <div className="bcard__actions">
         {b.phone && (
-          <a className="btn btn--secondary btn--sm" href={`tel:${b.phone.replace(/\s/g, "")}`}>
+          <a className="btn btn--secondary btn--sm" href={`tel:${b.phone.replace(/[^\d+]/g, "")}`} title={b.phone}>
             <Phone />
             Call
           </a>
         )}
         {b.website && (
-          <a className="btn btn--secondary btn--sm" href={b.website} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn--primary btn--sm" href={b.website} target="_blank" rel="noopener noreferrer">
             <Globe />
             Website
           </a>
@@ -174,30 +94,34 @@ export function LocalBusinessCard({ b }: { b: LocalBusiness }) {
   );
 }
 
-export function BusinessDirectory({ attachment }: { attachment: BizAttachment }) {
-  const res = useSearch<LocalBusinessResult>("businesses", { destinationCode: attachment.destinationCode, category: attachment.category });
-  const dealer = attachment.category === "Car dealership";
+export function BusinessDirectory({ attachment }: { attachment: Pick<BizAttachment, "destinationCode" | "category" | "snapshot"> }) {
+  const { settings } = useStore();
+  const res = useSearch<LocalBusinessResult>("businesses", { destinationCode: attachment.destinationCode, category: attachment.category }, !attachment.snapshot);
+  const data = attachment.snapshot ?? (res.status === "ok" ? res.data : null);
+  const copy = COPY[attachment.category] ?? COPY["Car rental agency"];
   const city = findAirport(attachment.destinationCode)?.city ?? attachment.destinationCode;
+  const live = data?.source === "live";
 
   return (
-    <section className="results" aria-label={dealer ? "Car dealerships" : "Car rental agencies"}>
+    <section className="results" aria-label={copy.title}>
       <div className="summary">
         <div className="summary__route">
-          <span className="t-eyebrow">Local directory</span>
+          <span className="t-eyebrow">Local companies</span>
           <div className="summary__places">
-            <span>{dealer ? "Car dealerships" : "Car rental agencies"}</span>
+            <span>{copy.title}</span>
           </div>
         </div>
         <div className="summary__meta">
           <span>
             <MapPin />
-            {city}
+            Near {city}
           </span>
-          {res.status === "ok" && res.data.source === "demo" && <DemoBadge label="No verified data source" />}
+          {live && <span className="badge badge--live">Live · Google Maps</span>}
+          {data && !live && <DemoBadge label="No data source" />}
         </div>
       </div>
-      {res.status === "loading" && <Skeleton h={180} r={16} />}
-      {res.status === "error" && (
+      {!data && res.status === "loading" && <Skeleton h={180} r={16} />}
+      {!data && res.status === "error" && (
         <div className="results__error">
           <span>{res.error}</span>
           <button className="btn btn--secondary btn--sm" onClick={res.retry}>
@@ -206,33 +130,44 @@ export function BusinessDirectory({ attachment }: { attachment: BizAttachment })
           </button>
         </div>
       )}
-      {res.status === "ok" &&
-        (res.data.businesses.length ? (
-          <div className="results__list">
-            {res.data.businesses.map((b) => (
-              <LocalBusinessCard key={b.id} b={b} />
-            ))}
-          </div>
+      {data &&
+        (data.businesses.length ? (
+          <>
+            <SourceLine count={data.businesses.length} noun={copy.noun} live={live} provider={data.provider} fetchedAt={data.fetchedAt} note="Real businesses · prices are quoted by each company" />
+            {data.widened && (
+              <p className="notice notice--soft">
+                Google Maps lists no {copy.title.toLowerCase()} close to {city}. These are the nearest ones, with how far away they are.
+              </p>
+            )}
+            <div className="results__list">
+              {data.businesses.map((b, i) => (
+                <LocalBusinessCard key={b.id} b={b} index={i} locale={settings.locale} />
+              ))}
+            </div>
+          </>
         ) : (
           <div className="directory-empty">
             <div className="directory-empty__art" aria-hidden="true">
               <MapPin />
             </div>
             <div className="directory-empty__text">
-              <h3 className="t-h3">No verified listings connected yet</h3>
+              <h3 className="t-h3">No {copy.title.toLowerCase()} found near {city}</h3>
               <p className="t-body" style={{ fontSize: "var(--fs-sm)", marginTop: 4 }}>
-                Rather than invent names, phone numbers or addresses, Pyrius shows businesses only from a verified directory (for example a Places API). Until one is connected, you can run the
-                same search on Google Maps.
-                {dealer && " Dealerships sell vehicles; for short trips a rental agency is usually what you need."}
+                Google Maps returned none for this area. You can widen the search on Google Maps yourself, or ask Pyrius to look near another city.
               </p>
             </div>
-            <a className="btn btn--primary" href={res.data.mapSearchUrl} target="_blank" rel="noopener noreferrer">
-              Search {dealer ? "dealerships" : "agencies"} near {city}
+            <a className="btn btn--primary" href={data.mapSearchUrl} target="_blank" rel="noopener noreferrer">
+              Search on Google Maps
               <ExternalLink />
             </a>
           </div>
         ))}
-      <p className="results__fine">Businesses shown here are never partners or sponsors of Pyrius unless clearly stated.</p>
+      <p className="results__fine">{copy.fine} Businesses shown here are never partners or sponsors of Pyrius.</p>
     </section>
   );
+}
+
+/** Older conversations asked for rental-car estimates; they now show the real rental agencies at that airport. */
+export function CarResults({ attachment }: { attachment: CarAttachment; conversationId?: string; onSaved?: (k: "flight" | "hotel" | "car") => void }) {
+  return <BusinessDirectory attachment={{ destinationCode: attachment.params.destinationCode, category: "Car rental agency" }} />;
 }

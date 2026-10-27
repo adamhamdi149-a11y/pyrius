@@ -1,18 +1,21 @@
 "use client";
-import { FlaskConical, LineChart, RefreshCw } from "lucide-react";
+import { LineChart, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useEffect } from "react";
 import { TrackerCard } from "@/components/offers/OfferViews";
 import { EmptyState, Skeleton } from "@/components/ui/primitives";
-import { useToast } from "@/components/ui/Toast";
 import { useStore } from "@/lib/store/AppStore";
 import { timeAgo } from "@/lib/utils";
 
 export default function TrackingPage() {
   const store = useStore();
-  const toast = useToast();
-  const { t, trackers, ready, settings } = store;
-  const active = trackers.filter((x) => x.status !== "paused");
+  const { t, trackers, ready, settings, refreshTrackers } = store;
   const last = trackers.map((x) => x.lastCheckedAt).sort().at(-1);
+
+  // Prices checked on another device show up here too.
+  useEffect(() => {
+    if (ready) refreshTrackers();
+  }, [ready, refreshTrackers]);
 
   return (
     <div className="main__scroll">
@@ -22,33 +25,14 @@ export default function TrackingPage() {
             <h1 className="t-title">{t("tracking.title")}</h1>
             <p className="page__sub">{t("tracking.subtitle")}</p>
           </div>
-          {trackers.length > 0 && (
-            <div style={{ display: "grid", justifyItems: "end", gap: 6 }}>
-              <button
-                className="btn btn--secondary"
-                disabled={!active.length}
-                onClick={() => {
-                  const n = store.runSimulatedCheck();
-                  toast({
-                    tone: "info",
-                    title: `Simulated check ran on ${active.length} offer${active.length > 1 ? "s" : ""}`,
-                    description: n ? `${n} now at or below target in the simulation — not a real fare change.` : "Demo prices only. No live fares were checked.",
-                  });
-                }}
-              >
-                <RefreshCw />
-                Run simulated check
-              </button>
-              {last && <span className="t-meta">Last simulated check {timeAgo(last, settings.locale)}</span>}
-            </div>
-          )}
+          {last && <span className="t-meta">Last check {timeAgo(last, settings.locale)}</span>}
         </header>
 
         <div className="notice" style={{ marginBottom: 20 }}>
-          <FlaskConical />
+          <RefreshCw />
           <span>
-            <b style={{ color: "var(--text)", fontWeight: 560 }}>Simulation mode.</b> No live price source is connected, so new prices come from a deterministic demo simulator and only change when you
-            run a check. Pyrius never reports a real-world price drop from simulated data.
+            <b style={{ color: "var(--text)", fontWeight: 560 }}>Checked when you ask.</b> Tap “Run check” on an offer and Pyrius looks it up again with Google and records
+            the real price. Each check uses one live search.
           </span>
         </div>
 
@@ -65,7 +49,7 @@ export default function TrackingPage() {
             <EmptyState
               icon={<LineChart />}
               title="You're not tracking any prices"
-              body="Open a flight, stay or car and choose “Track price” to set a target. You'll see its history here."
+              body="Choose “Track price” on a flight or a stay to set a target. Run a check whenever you want today's real price, and see its history here."
               action={
                 <Link href="/app" className="btn btn--primary" onClick={() => store.setActiveId(null)}>
                   {t("empty.startCta")}

@@ -64,7 +64,7 @@ export function PriceChart({ history, target, currency, locale = "en", height = 
       }}
       onPointerLeave={() => setHover(null)}
       role="img"
-      aria-label={`Simulated price history: from ${fmt(first.price)} to ${fmt(current.price)}${target ? `, target ${fmt(target)}` : ""}.`}
+      aria-label={`Price history: from ${fmt(first.price)} to ${fmt(current.price)}${target ? `, target ${fmt(target)}` : ""}.`}
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H} style={{ display: "block", overflow: "visible" }}>
         <defs>

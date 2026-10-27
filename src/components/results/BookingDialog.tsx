@@ -25,9 +25,9 @@ const isGoogleRedirect = (url: string) => {
 
 /**
  * Opens the tab the seller's page will load in. It has to happen during the click itself (browsers block
- * tabs opened later), so it shows a short holding page while Pyrius finds the return flight and the seller.
+ * tabs opened later), so it shows a short holding page while Pyrius finds the seller.
  */
-export function openBookingTab(offer: FlightOffer): Window | null {
+export function openHoldingTab(title: string, note: string, wait = "This usually takes 10 to 20 seconds, then the seller's page opens here."): Window | null {
   const w = window.open("", "_blank");
   if (!w) return null;
   try {
@@ -43,20 +43,23 @@ export function openBookingTab(offer: FlightOffer): Window | null {
     dot.style.cssText = "width:34px;height:34px;margin:0 auto 18px;border-radius:50%;border:3px solid #2a2b33;border-top-color:#ff7628;animation:s .9s linear infinite";
     const h = d.createElement("p");
     h.style.cssText = "margin:0 0 6px;font-size:18px;font-weight:600";
-    h.textContent = routeOf(offer);
+    h.textContent = title;
     const p = d.createElement("p");
     p.style.cssText = "margin:0;color:#9899a6";
-    p.textContent = offer.returnPending ? "Finding the cheapest return flight and the best seller…" : "Finding the best seller for this flight…";
-    const wait = d.createElement("p");
-    wait.style.cssText = "margin:14px 0 0;font-size:13px;color:#6c6d79";
-    wait.textContent = "This usually takes 10 to 20 seconds, then the seller's page opens here.";
-    box.append(style, dot, h, p, wait);
+    p.textContent = note;
+    const sub = d.createElement("p");
+    sub.style.cssText = "margin:14px 0 0;font-size:13px;color:#6c6d79";
+    sub.textContent = wait;
+    box.append(style, dot, h, p, sub);
     d.body.append(box);
   } catch {
     // The tab still works as a target even if the holding page couldn't be drawn.
   }
   return w;
 }
+
+export const openBookingTab = (offer: FlightOffer) =>
+  openHoldingTab(routeOf(offer), offer.returnPending ? "Finding the cheapest return flight and the best seller…" : "Finding the best seller for this flight…");
 
 /** Google's booking redirect takes a form POST; it opens the seller's page for this exact itinerary. */
 function sendToSeller(req: BookRequest, tab?: Window | null) {

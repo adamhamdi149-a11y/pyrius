@@ -30,7 +30,7 @@ export function SearchProgress({ what, children, source = DEMO_SOURCE }: { what:
 }
 
 /** Honest provenance line under a finished search: where the results came from, and when. */
-export function SourceLine({ count, noun, ms, live, provider, fetchedAt }: { count: number; noun: string; ms?: number; live?: boolean; provider?: string; fetchedAt?: string }) {
+export function SourceLine({ count, noun, ms, live, provider, fetchedAt, note }: { count: number; noun: string; ms?: number; live?: boolean; provider?: string; fetchedAt?: string; note?: string }) {
   const at = fetchedAt ? new Date(fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
   return (
     <p className="source-line" data-live={Boolean(live)}>
@@ -40,7 +40,7 @@ export function SourceLine({ count, noun, ms, live, provider, fetchedAt }: { cou
         {live && at ? ` · retrieved at ${at}` : ""}
         {!live && ms !== undefined && ` · answered in ${ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`}`}
       </span>
-      <span className="source-line__note">{live ? "Live fares · prices can change until you book" : "Demo prices — not live fares or availability"}</span>
+      <span className="source-line__note">{live ? (note ?? "Live fares · prices can change until you book") : "Demo prices — not live fares or availability"}</span>
     </p>
   );
 }

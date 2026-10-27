@@ -11,7 +11,7 @@ const TTL_MS = 5 * 60_000;
 const cache = new Map<string, { at: number; snap: Promise<FlightSnapshot> }>();
 const SNAPSHOT_LIMIT = 30;
 
-const keyOf = (p: FlightSearchParams) => JSON.stringify([p.originCode, p.destinationCode, p.departDate, p.returnDate ?? "", p.adults, p.children, p.currency, Boolean(p.nonstopOnly)]);
+const keyOf = (p: FlightSearchParams) => JSON.stringify([p.originCode, p.destinationCode, p.departDate, p.returnDate ?? "", p.adults, p.children, p.infants ?? 0, p.cabin ?? "economy", p.currency, Boolean(p.nonstopOnly)]);
 
 export async function searchFlights(p: FlightSearchParams): Promise<FlightSnapshot> {
   const key = `${flightMode()}:${keyOf(p)}`;

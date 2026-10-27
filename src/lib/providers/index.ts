@@ -1,17 +1,18 @@
 import { demoProviders } from "./demo";
 import { ProviderError } from "./errors";
 import { serpApiFlights } from "./serpapi";
-import type { FlightProvider, TravelProviders } from "./types";
+import { serpApiHotels } from "./serpapiHotels";
+import { serpApiPlaces } from "./serpapiPlaces";
+import type { FlightProvider, HotelProvider, LocalBusinessProvider, TravelProviders } from "./types";
 
 /**
  * Single switch point for travel data, server-side only.
  *
- * Flights:
- *  - FLIGHT_PROVIDER=serpapi (or unset) with SERPAPI_API_KEY: live Google Flights results.
- *  - FLIGHT_PROVIDER=demo: generated sample flights, for development and demos only.
- *  - Otherwise: no provider. Searches fail with "not_configured"; sample flights are never
- *    substituted for a live search.
- * Hotels, cars and local businesses have no live provider yet and stay labelled as examples.
+ *  - FLIGHT_PROVIDER=serpapi (or unset) with SERPAPI_API_KEY: live Google Flights, Google Hotels
+ *    and Google Maps results.
+ *  - FLIGHT_PROVIDER=demo: generated sample flights and stays, for development only.
+ *  - Otherwise: no provider. Searches fail with "not_configured"; samples are never substituted
+ *    for a live search.
  */
 export type FlightMode = "live" | "demo" | "none";
 
@@ -22,18 +23,17 @@ export function flightMode(): FlightMode {
   return "none";
 }
 
-const notConfigured: FlightProvider = {
-  id: "none",
-  source: "live",
-  async search() {
-    throw new ProviderError("not_configured", "none");
-  },
+const fail = async (): Promise<never> => {
+  throw new ProviderError("not_configured", "none");
 };
+const notConfigured: FlightProvider & HotelProvider & LocalBusinessProvider = { id: "none", source: "live", search: fail };
 
 export function getProviders(): TravelProviders {
   const mode = flightMode();
-  return { ...demoProviders, flights: mode === "live" ? serpApiFlights : mode === "demo" ? demoProviders.flights : notConfigured };
+  if (mode === "live") return { flights: serpApiFlights, hotels: serpApiHotels, businesses: serpApiPlaces };
+  if (mode === "demo") return demoProviders;
+  return { flights: notConfigured, hotels: notConfigured, businesses: notConfigured };
 }
 
-export { serpApiFlights };
+export { serpApiFlights, serpApiHotels };
 export type { TravelProviders } from "./types";

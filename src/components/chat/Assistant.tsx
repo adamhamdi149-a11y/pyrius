@@ -1,37 +1,50 @@
 "use client";
-import { ArrowDown, ArrowUpRight, CalendarSearch, Info, Palmtree, PiggyBank, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { OrbStage } from "@/components/ai/OrbStage";
 import { CarResults, BusinessDirectory } from "@/components/results/CarResults";
+import { AirportPicker } from "@/components/flow/AirportPicker";
+import { echo, GREETING, resultsMessage, stepMessage } from "@/components/flow/copy";
+import { FlowPanel, type EditTarget, type FlowHandlers, type ResultSort } from "@/components/flow/FlowPanel";
+import { TripEditor } from "@/components/flow/TripEditor";
 import { FlightResults } from "@/components/results/FlightResults";
 import { HotelResults } from "@/components/results/HotelResults";
 import { applyFlightFilters } from "@/components/results/FlightResults";
 import { offerTitle } from "@/components/results/OfferActions";
 import { flightBrief } from "@/lib/flights/brief";
+import { hotelBrief, sortStays } from "@/lib/hotels/brief";
 import { authHeaders } from "@/lib/authHeaders";
 import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
-import { findAirport } from "@/lib/data/world";
-import type { MessageKey } from "@/lib/i18n";
+import { findAirport, placeName } from "@/lib/data/world";
+import {
+  canSearch,
+  nextStep,
+  resultsMatch,
+  searchPlan,
+  setCabin,
+  setDates,
+  setDestination,
+  setLegs,
+  setOrigin,
+  setTravelers,
+  setTripKind,
+  swapAirports,
+  travelersOf,
+  tripKind,
+  type FlightStep,
+} from "@/lib/flights/workflow";
 import { newConversation, useStore } from "@/lib/store/AppStore";
-import { messageAttachments, type AgentReply, type AnyOffer, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type OfferKind, type TripPreferences } from "@/lib/types";
+import { messageAttachments, type AgentReply, type AnyOffer, type Attachment, type ChatMessage, type Chip, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type FlightSnapshot, type OfferKind, type TripPreferences } from "@/lib/types";
 import { DURATION, stagger, type OrbMood } from "@/lib/motion";
 import { takePendingPrompt } from "@/lib/pendingPrompt";
 import { cx, formatRange, money, toISODate, uid } from "@/lib/utils";
 import { Composer, type ComposerHandle, type ComposerState } from "./Composer";
-import { EditSearchDialog } from "./EditSearchDialog";
 import { AssistantMessage, ErrorRow, Thinking, UserMessage } from "./Messages";
 import { TripBrief } from "./TripBrief";
 
 type QuickPrefs = Pick<TripPreferences, "nonstopOnly" | "carryOnOnly" | "flexibleDates">;
-
-const SUGGESTIONS: { key: MessageKey; icon: typeof Sparkles; en: string; fr: string }[] = [
-  { key: "suggest.cheap", icon: PiggyBank, en: "Find me a cheap getaway for a long weekend", fr: "Trouve-moi une escapade pas chère pour un long week-end" },
-  { key: "suggest.japan", icon: Sparkles, en: "Plan a trip to Japan", fr: "Planifie un voyage au Japon" },
-  { key: "suggest.dates", icon: CalendarSearch, en: "I already know my dates — help me find the best flights", fr: "Je connais déjà mes dates, aide-moi à trouver les meilleurs vols" },
-  { key: "suggest.warm", icon: Palmtree, en: "Discover somewhere warm in February", fr: "Découvre un endroit chaud en février" },
-];
 
 const EXAMPLES = {
   en: ["Somewhere warm in February, under $800…", "Tokyo for two in the spring…", "A long weekend in Lisbon from Toronto…", "Paris, March 10 to 17, nonstop…"],
@@ -70,7 +83,11 @@ export function Assistant() {
   const [listening, setListening] = useState(false);
   const [engine, setEngine] = useState<"demo" | "openai" | null>(null);
   const [flightMode, setFlightMode] = useState<"live" | "demo" | "none" | null>(null);
-  const [editing, setEditing] = useState<FlightSearchParams | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [flowNote, setFlowNote] = useState<string | null>(null);
+  const searchSeq = useRef(0);
   const [atBottom, setAtBottom] = useState(true);
   const [draftPrefs, setDraftPrefs] = useState<QuickPrefs>({});
   const [flash, setFlash] = useState<"success" | "error" | null>(null);
@@ -195,7 +212,6 @@ export function Assistant() {
     };
     const flights = latest("flights");
     const hotels = latest("hotels");
-    const cars = latest("cars");
     const tracked = new Map(store.trackers.map((t) => [t.offerId, t]));
     // The flight cards in the order they're shown, so "the second one" means the same thing to the AI.
     const snap = flights?.snapshot;
@@ -212,8 +228,7 @@ export function Assistant() {
     return {
       results: {
         flights: flights && { params: flights.params, sort: flights.filters?.sort, source: snap?.source, fetchedAt: snap?.fetchedAt, shown },
-        hotels: hotels?.params,
-        cars: cars?.params,
+        hotels: hotels && { params: hotels.params, shown: sortStays(hotels.snapshot?.offers ?? [], hotels.sort ?? "price").map((h, i) => hotelBrief(h, i + 1)) },
       },
       saved: store.saved.slice(0, 60).map((s) => ({
         id: s.id,
@@ -233,8 +248,10 @@ export function Assistant() {
   const findOffer = (c: Conversation, id: string): AnyOffer | undefined => {
     for (let i = c.messages.length - 1; i >= 0; i--) {
       for (const a of messageAttachments(c.messages[i])) {
-        const hit = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
-        if (hit) return { kind: "flight", offer: hit };
+        const flight = a.type === "flights" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+        if (flight) return { kind: "flight", offer: flight };
+        const stay = a.type === "hotels" ? a.snapshot?.offers.find((o) => o.id === id) : undefined;
+        if (stay) return { kind: "hotel", offer: stay };
       }
     }
     return store.saved.find((s) => s.id === id)?.data;
@@ -369,27 +386,141 @@ export function Assistant() {
     }
   };
 
-  const applyEdit = (p: FlightSearchParams) => {
+  /* ---------------- Flight workflow: controls move the trip forward without waiting for the AI ---------------- */
+
+  const today = toISODate(new Date());
+
+  /** The newest set of flight results in the conversation (several for multi-city). */
+  const latestFlights = (c: Conversation) => {
+    for (let i = c.messages.length - 1; i >= 0; i--) {
+      const list = messageAttachments(c.messages[i]).filter((a): a is Extract<Attachment, { type: "flights" }> => a.type === "flights");
+      if (list.length) return { messageId: c.messages[i].id, list };
+    }
+    return null;
+  };
+  const freshResults = (c: Conversation) => {
+    const g = latestFlights(c);
+    return Boolean(g && resultsMatch(c.prefs, g.list.map((a) => a.params), today));
+  };
+
+  const ensureConversation = () => {
+    if (convRef.current) return convRef.current;
+    const fresh = newConversation(settings);
+    return { ...fresh, prefs: { ...fresh.prefs, ...stripUndefined(draftPrefs) } };
+  };
+
+  /**
+   * A choice made with a control: the workflow commits it (or says why it can't), the choice appears
+   * as the user's message, and Pyrius asks for the next missing detail right away.
+   */
+  const advance = (update: (t: TripPreferences) => { trip: TripPreferences; error?: string }, said: (t: TripPreferences) => string) => {
+    if (pending || searching) return;
+    const base = ensureConversation();
+    const r = update(base.prefs);
+    if (r.error) return setFlowNote(r.error);
+    setFlowNote(null);
+    setSearchError(null);
+    const t = r.trip;
+    const now = new Date().toISOString();
+    const greeting: ChatMessage[] = base.messages.length ? [] : [{ id: uid("m_"), role: "assistant", text: GREETING(settings.locale), at: now }];
+    const user: ChatMessage = { id: uid("m_"), role: "user", text: said(t), at: now };
+    const step = nextStep(t, false);
+    const ai: ChatMessage = { id: uid("m_"), role: "assistant", text: stepMessage(t, step, settings.locale), at: now };
+    if (!base.messages.length) {
+      setLeaving(true);
+      setTimeout(() => setLeaving(false), DURATION.welcomeLeave);
+    }
+    const title = t.originCode && t.destinationCode ? `${placeName(t.originCode, settings.locale)} → ${placeName(t.destinationCode, settings.locale)}` : t.destinationCode ? L(`Trip to ${placeName(t.destinationCode, "en")}`, `Voyage à ${placeName(t.destinationCode, "fr")}`) : base.title;
+    const c: Conversation = { ...base, title, prefs: t, messages: [...base.messages, ...greeting, user, ai] };
+    convRef.current = c;
+    save(c);
+    store.setActiveId(c.id);
+    // A brand-new conversation appears as the welcome screen leaves, so its reply isn't typed out
+    // (switching conversations resets the typing animation anyway).
+    if (base.messages.length) {
+      setAnimatingId(ai.id);
+      setTyping(true);
+    }
+    stick.current = true;
+  };
+
+  /** A change from the trip summary: committed quietly; results for the old trip are marked as outdated. */
+  const commitTrip = (update: (t: TripPreferences) => { trip: TripPreferences; error?: string } | TripPreferences) => {
     const c = convRef.current;
-    setEditing(null);
-    if (!c) return;
-    const route = `${findAirport(p.originCode)?.city} → ${findAirport(p.destinationCode)?.city}`;
-    appendAssistant(
-      c,
-      {
-        text: L(
-          `Updated. Here are options for ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}. Same as before, these are demo prices rather than live fares.`,
-          `C'est à jour. Voici les options pour ${route}, ${formatRange(p.departDate, p.returnDate, settings.locale)}. Comme avant, ce sont des prix de démonstration.`,
-        ),
-        attachment: { type: "flights", params: p, budget: c.prefs.budget || undefined, filters: { nonstopOnly: c.prefs.nonstopOnly, carryOnOnly: c.prefs.carryOnOnly } },
-        chips: [{ label: L("Find a place to stay", "Trouver un hébergement"), action: { type: "hotels", stayType: "hotel" } }],
-      },
-      {
-        stage: "flights",
-        title: route,
-        prefs: { ...c.prefs, originCode: p.originCode, destinationCode: p.destinationCode, departDate: p.departDate, returnDate: p.returnDate, adults: p.adults, children: p.children, durationDays: undefined },
-      },
+    if (!c || pending) return false;
+    const r = update(c.prefs);
+    const res = "trip" in r ? r : { trip: r as TripPreferences };
+    if (res.error) {
+      toast({ tone: "info", title: res.error });
+      return false;
+    }
+    const next = { ...c, prefs: res.trip };
+    convRef.current = next;
+    save(next);
+    return true;
+  };
+
+  const runSearch = async () => {
+    const c = convRef.current;
+    if (!c || searching || pending) return;
+    const plan = searchPlan(c.prefs, today);
+    if (!plan.length) return;
+    const seq = ++searchSeq.current;
+    setSearching(true);
+    setSearchError(null);
+    stick.current = true;
+    try {
+      const auth = await authHeaders();
+      const snaps: FlightSnapshot[] = await Promise.all(
+        plan.map(async (p) => {
+          const r = await fetch("/api/search/flights", { method: "POST", headers: { "Content-Type": "application/json", ...auth }, body: JSON.stringify(p) });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(typeof body.error === "string" ? body.error : L("The flight search couldn't be completed.", "La recherche de vols n'a pas abouti."));
+          return body as FlightSnapshot;
+        }),
+      );
+      // A newer search started, or the trip changed while this one ran: its results no longer apply.
+      const now = convRef.current;
+      if (seq !== searchSeq.current || !now || now.id !== c.id || !resultsMatch(now.prefs, plan, today)) return;
+      const sort = now.prefs.priority === "fastest" ? "duration" : "price";
+      const attachments: Attachment[] = plan.map((params, i) => ({
+        type: "flights",
+        params,
+        snapshot: snaps[i],
+        budget: now.prefs.budget || undefined,
+        filters: { sort, nonstopOnly: now.prefs.nonstopOnly, carryOnOnly: now.prefs.carryOnOnly },
+        leg: plan.length > 1 ? { index: i, count: plan.length } : undefined,
+      }));
+      appendAssistant(now, { text: resultsMessage(plan, snaps, settings.locale), attachments }, { stage: "flights" });
+    } catch (err) {
+      if (seq === searchSeq.current) setSearchError((err as Error).message);
+    } finally {
+      if (seq === searchSeq.current) setSearching(false);
+    }
+  };
+
+  /** "Cheapest", "Fastest", "Fewest stops": re-sort the latest results in place. */
+  const sortResults = (sort: ResultSort) => {
+    const c = convRef.current;
+    const g = c && latestFlights(c);
+    if (!c || !g) return;
+    const messages = c.messages.map((m) =>
+      m.id !== g.messageId ? m : { ...m, attachments: messageAttachments(m).map((a) => (a.type === "flights" ? { ...a, filters: { ...a.filters, sort } } : a)), attachment: undefined },
     );
+    save({ ...c, messages });
+  };
+
+  const flow: FlowHandlers = {
+    onDestination: (code) => advance((t) => setDestination(t, code), (t) => echo("destination", t, settings.locale)),
+    onOrigin: (code) => advance((t) => setOrigin(t, code), (t) => echo("origin", t, settings.locale)),
+    onTripKind: (k) => (convRef.current ? commitTrip((t) => setTripKind(t, k)) : undefined),
+    onDates: (depart, ret) => advance((t) => setDates(t, depart, ret, today), (t) => echo("dates", t, settings.locale)),
+    onLegs: (legs) => advance((t) => setLegs(t, legs), (t) => echo("legs", t, settings.locale)),
+    onTravelers: (p) => commitTrip((t) => setTravelers(t, p)),
+    onCabin: (cabin) => commitTrip((t) => setCabin(t, cabin)),
+    onSearch: runSearch,
+    onSort: sortResults,
+    onEdit: setEditTarget,
   };
 
   const quickPrefs: QuickPrefs = conv ? { nonstopOnly: conv.prefs.nonstopOnly, carryOnOnly: conv.prefs.carryOnOnly, flexibleDates: conv.prefs.flexibleDates } : draftPrefs;
@@ -398,10 +529,24 @@ export function Assistant() {
     else setDraftPrefs(p);
   };
 
-  const renderAttachment = (a: Attachment, c: Conversation) => {
+  const renderAttachment = (a: Attachment, c: Conversation, messageId: string) => {
     switch (a.type) {
-      case "flights":
-        return <FlightResults attachment={a} conversationId={c.id} onSaved={onSaved} onEdit={() => setEditing(a.params)} />;
+      case "flights": {
+        // Only the newest results can go out of date; earlier ones are the conversation's history.
+        const latest = latestFlights(c);
+        const outdated = latest?.messageId === messageId && !freshResults(c);
+        return (
+          <FlightResults
+            key={`${messageId}-${a.leg?.index ?? 0}`}
+            attachment={a}
+            conversationId={c.id}
+            onSaved={onSaved}
+            onEdit={() => setEditTarget(tripKind(c.prefs) === "multi" ? "dates" : "destination")}
+            outdated={outdated}
+            onSearchAgain={outdated && canSearch(c.prefs, today) ? runSearch : undefined}
+          />
+        );
+      }
       case "hotels":
         return <HotelResults attachment={a} conversationId={c.id} onSaved={onSaved} />;
       case "cars":
@@ -421,6 +566,14 @@ export function Assistant() {
   const composerState: ComposerState = pending ? "processing" : flash ?? "idle";
   const savedKinds = useMemo(() => new Set<OfferKind>(store.saved.filter((s) => s.conversationId === conv?.id).map((s) => s.kind)), [store.saved, conv?.id]);
 
+  // The workflow's control shows under the latest message while the conversation is about flights.
+  const lastMessage = conv?.messages.at(-1);
+  const movedOn = Boolean(lastMessage && messageAttachments(lastMessage).some((a) => a.type !== "flights"));
+  const step: FlightStep = conv ? nextStep(conv.prefs, freshResults(conv)) : "destination";
+  const showFlow =
+    !showWelcome && Boolean(conv) && (conv!.stage === "collecting" || conv!.stage === "flights") && !movedOn && !pending && !typing && !error && !(step === "results" && lastMessage?.chips?.length);
+  const hadResults = Boolean(conv && latestFlights(conv));
+
   const statusText = listening
     ? L("Listening — speak naturally, then tap stop.", "À l'écoute — parlez naturellement, puis touchez arrêter.")
     : pending
@@ -430,7 +583,7 @@ export function Assistant() {
         : flash === "success"
           ? L("Reply ready.", "Réponse prête.")
           : flightMode === "live"
-            ? L("Live fares from Google Flights. You always book directly with the airline or travel site.", "Tarifs en direct de Google Flights. Vous réservez toujours directement auprès de la compagnie ou du site de voyage.")
+            ? L("Live prices from Google. You always book directly with the airline, hotel or travel site.", "Prix en direct de Google. Vous réservez toujours directement auprès de la compagnie, de l'hôtel ou du site de voyage.")
             : flightMode === "none"
               ? L("Pyrius suggests and compares. Live flight search isn't connected yet.", "Pyrius suggère et compare. La recherche de vols en direct n'est pas encore connectée.")
               : L("Pyrius suggests and compares; you always book directly with the provider. Prices shown are demo data.", "Pyrius suggère et compare; vous réservez toujours directement auprès du fournisseur. Les prix affichés sont des données de démonstration.");
@@ -455,7 +608,9 @@ export function Assistant() {
       {showWelcome && <div className="chat__bar">{modePill}</div>}
 
       <div className="chat__scroll" ref={scroller} onScroll={onScroll}>
-        {!showWelcome && conv && <TripBrief conv={conv} saved={savedKinds} locale={settings.locale} pending={pending} aside={modePill} />}
+        {!showWelcome && conv && (
+          <TripBrief conv={conv} saved={savedKinds} locale={settings.locale} pending={pending || searching} aside={modePill} onEdit={setEditTarget} onSwap={() => commitTrip(swapAirports)} />
+        )}
         {showWelcome && <OrbitBackdrop leaving={leaving} />}
         <div className={showWelcome ? "chat__inner chat__inner--empty" : "chat__inner"} ref={inner}>
           {showWelcome ? (
@@ -466,22 +621,12 @@ export function Assistant() {
                 {t("brand.tagline")}
               </span>
               <h1 id="welcome-title" className="t-display welcome__title">
-                {t("welcome.title")}
+                {L("Let's find your next flight.", "Trouvons votre prochain vol.")}
               </h1>
-              <div className="suggest m-stagger">
-                {SUGGESTIONS.map(({ key, icon: Icon, en, fr }, i) => (
-                  <button key={key} className="suggest__card m-press" data-glow style={stagger(i + 2)} onClick={() => send(settings.locale === "fr" ? fr : en)} disabled={pending || leaving || focus}>
-                    <span className="suggest__icon">
-                      <Icon />
-                    </span>
-                    <span className="suggest__text">
-                      <span className="suggest__title" style={{ display: "block" }}>
-                        {t(key)}
-                      </span>
-                    </span>
-                    <ArrowUpRight className="suggest__arrow" />
-                  </button>
-                ))}
+              <div className="welcome__start" style={stagger(2)}>
+                <p className="welcome__ask">{L("Where are you heading?", "Où allez-vous ?")}</p>
+                <AirportPicker role="destination" locale={settings.locale} onPick={flow.onDestination} />
+                <p className="welcome__or">{L("Or describe the whole trip below: places, dates, travelers, cabin.", "Ou décrivez tout le voyage ci-dessous : lieux, dates, voyageurs, classe.")}</p>
               </div>
             </section>
           ) : (
@@ -499,13 +644,22 @@ export function Assistant() {
                   >
                     {messageAttachments(m).map((a, i) => (
                       <div key={`${a.type}-${i}`} style={{ display: "contents" }}>
-                        {renderAttachment(a, conv!)}
+                        {renderAttachment(a, conv!, m.id)}
                       </div>
                     ))}
                   </AssistantMessage>
                 </div>
               ),
             )
+          )}
+          {showFlow && conv && (
+            <FlowPanel key={step} trip={conv.prefs} step={step} today={today} locale={settings.locale} homeCode={settings.homeAirport} busy={searching} hadResults={hadResults} note={flowNote} h={flow} />
+          )}
+          {searching && !showWelcome && (
+            <Thinking label={L("Searching live fares on Google Flights", "Recherche des tarifs en direct sur Google Flights")} slowLabel={L("Still searching — full results can take 20 seconds", "Toujours en cours — cela peut prendre 20 secondes")} />
+          )}
+          {searchError && !searching && !showWelcome && (
+            <ErrorRow text={L("The flight search didn't finish", "La recherche de vols n'a pas abouti")} hint={searchError} retryLabel={t("chat.retry")} onRetry={runSearch} />
           )}
           {pending && !showWelcome && <Thinking label={L("Pyrius is thinking", "Pyrius réfléchit")} slowLabel={L("Still working on it", "Toujours en cours")} />}
           {error && !showWelcome && (
@@ -547,7 +701,17 @@ export function Assistant() {
         </p>
       </div>
 
-      {editing && <EditSearchDialog open onClose={() => setEditing(null)} params={editing} onApply={applyEdit} />}
+      {editTarget && conv && (
+        <TripEditor
+          target={editTarget}
+          trip={conv.prefs}
+          today={today}
+          locale={settings.locale}
+          homeCode={settings.homeAirport}
+          onClose={() => setEditTarget(null)}
+          commit={(u) => commitTrip(u)}
+        />
+      )}
     </div>
   );
 }

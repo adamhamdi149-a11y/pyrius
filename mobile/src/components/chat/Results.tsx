@@ -1,13 +1,14 @@
 import * as WebBrowser from "expo-web-browser";
-import { BedDouble, Bell, BellRing, Bookmark, BookmarkCheck, Car, ExternalLink, MapPin, Plane } from "lucide-react-native";
+import { BedDouble, Bell, BellRing, Bookmark, BookmarkCheck, Car, ExternalLink, Globe, MapPin, Phone, Plane, Star } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { mapSearchUrl } from "@/lib/booking";
 import { findAirport } from "@/lib/data/world";
 import { applyFlightFilters } from "@/lib/flights/filters";
-import { suggestedTarget } from "@/lib/tracking/simulator";
-import type { AnyOffer, Attachment, CarOffer, FlightOffer, FlightSegment, HotelOffer } from "@/lib/types";
+import { sortStays } from "@/lib/hotels/brief";
+import { suggestedTarget } from "@/lib/tracking/trackers";
+import type { AnyOffer, Attachment, CarOffer, FlightOffer, FlightSegment, HotelOffer, LocalBusinessResult } from "@/lib/types";
 import { formatDuration, formatTime, money, timeAgo } from "@/lib/utils";
 import { api } from "~/lib/api";
 import { useStore } from "~/lib/store";
@@ -161,6 +162,7 @@ function FlightResults({ a, conversationId }: { a: Extract<Attachment, { type: "
 function useExamples<T>(kind: "hotels" | "cars", params: unknown) {
   const [offers, setOffers] = useState<T[] | null>(null);
   useEffect(() => {
+    if (!params) return;
     let alive = true;
     api<{ offers: T[] }>(`/api/search/${kind}`, params)
       .then((r) => alive && setOffers(r.offers))
@@ -174,21 +176,33 @@ function useExamples<T>(kind: "hotels" | "cars", params: unknown) {
 
 function HotelResults({ a, conversationId }: { a: Extract<Attachment, { type: "hotels" }>; conversationId?: string }) {
   const { L, settings } = useStore();
-  const offers = useExamples<HotelOffer>("hotels", a.params);
+  const accent = useAccent();
+  const [all, setAll] = useState(false);
+  // Live stays arrive with the reply (Google Hotels); older conversations fetch the example stays again.
+  const fetched = useExamples<HotelOffer>("hotels", a.snapshot ? null : a.params);
+  const offers = a.snapshot?.offers ?? fetched;
   if (!offers) return <ActivityIndicator color={colors.text2} style={{ marginVertical: 12 }} />;
-  const list = [...offers].sort((x, y) => x.pricePerNight - y.pricePerNight).slice(0, 4);
+  const live = a.snapshot?.source === "live";
+  const list = sortStays([...offers], a.sort ?? "price").slice(0, all ? 12 : 4);
   return (
     <View style={{ gap: 10 }}>
       <View style={s.source}>
         <BedDouble color={colors.text3} size={13} />
-        <T style={{ fontSize: 12, color: colors.text3 }}>{L("Example stays: illustrative names and prices, not real listings", "Hébergements d'exemple : noms et prix illustratifs")}</T>
+        <T style={{ fontSize: 12, color: colors.text3 }}>
+          {live
+            ? `${offers.length} ${L("stays", "hébergements")} · Google Hotels · ${timeAgo(a.snapshot!.fetchedAt, settings.locale)}`
+            : L("Example stays: illustrative names and prices, not real listings", "Hébergements d'exemple : noms et prix illustratifs")}
+        </T>
       </View>
       {list.map((h, i) => (
-        <Animated.View key={h.id} entering={FadeInDown.delay(i * 70)} style={s.card}>
+        <Animated.View key={h.id} entering={FadeInDown.delay(i * 70)} style={[s.card, { paddingTop: h.image && live ? 0 : 16, overflow: "hidden" }]}>
+          {h.image && live ? <Image source={{ uri: h.image }} style={s.photo} accessibilityIgnoresInvertColors /> : null}
           <View style={s.head}>
             <View style={{ flex: 1 }}>
               <T weight="medium" style={{ fontSize: 15 }}>{h.name}</T>
-              <T style={{ fontSize: 12, color: colors.text3 }}>{`${h.type} · ${h.neighborhood} · ${"★".repeat(h.stars)}`}</T>
+              <T style={{ fontSize: 12, color: colors.text3 }} numberOfLines={1}>
+                {[h.type, h.neighborhood, h.stars ? "★".repeat(h.stars) : null, h.rating ? `${h.rating}/${h.ratingScale ?? 5}${h.reviews ? ` (${h.reviews})` : ""}` : null].filter(Boolean).join(" · ")}
+              </T>
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <T weight="mono" style={{ fontSize: 17 }}>{money(h.pricePerNight, h.currency, settings.locale)}</T>
@@ -198,13 +212,18 @@ function HotelResults({ a, conversationId }: { a: Extract<Attachment, { type: "h
           <View style={s.foot}>
             <SaveTrack o={{ kind: "hotel", offer: h }} conversationId={conversationId} />
             <View style={{ flex: 1 }} />
-            <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(h.searchUrl)} style={s.ghost}>
-              <T weight="medium" style={{ fontSize: 14 }}>Booking.com</T>
-              <ExternalLink color={colors.text2} size={14} />
+            <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(h.bookingUrl ?? h.searchUrl)} style={h.bookingUrl ? [s.book, { backgroundColor: accent.accent }] : s.ghost}>
+              <T weight={h.bookingUrl ? "semibold" : "medium"} style={{ fontSize: 14, color: h.bookingUrl ? accent.ink : colors.text }}>{h.bookingUrl ? L("Book", "Réserver") : "Booking.com"}</T>
+              {h.bookingUrl ? null : <ExternalLink color={colors.text2} size={14} />}
             </Pressable>
           </View>
         </Animated.View>
       ))}
+      {offers.length > 4 ? (
+        <Pressable accessibilityRole="button" onPress={() => setAll((x) => !x)} style={s.more}>
+          <T weight="medium" style={{ fontSize: 14, color: colors.text2 }}>{all ? L("Show fewer", "Afficher moins") : L(`Show more stays`, `Plus d'hébergements`)}</T>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -246,6 +265,53 @@ function CarResults({ a, conversationId }: { a: Extract<Attachment, { type: "car
   );
 }
 
+/** Real companies listed on Google Maps (rental agencies, dealerships, charters). Pyrius has no partnership with them. */
+function Businesses({ r }: { r: LocalBusinessResult }) {
+  const { L } = useStore();
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={s.source}>
+        <MapPin color={colors.text3} size={13} />
+        <T style={{ fontSize: 12, color: colors.text3 }}>{`${r.businesses.length} · ${r.provider ?? "Google Maps"}${r.widened ? ` · ${L("nearest found", "les plus proches")}` : ""}`}</T>
+      </View>
+      {r.businesses.slice(0, 6).map((b, i) => (
+        <Animated.View key={b.id} entering={FadeInDown.delay(i * 70)} style={s.card}>
+          <View style={{ gap: 3 }}>
+            <T weight="medium" style={{ fontSize: 15 }}>{b.name}</T>
+            <T style={{ fontSize: 12, color: colors.text3 }} numberOfLines={2}>{[b.type, b.address].filter(Boolean).join(" · ")}</T>
+            {b.rating ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Star color={colors.warning} size={12} fill={colors.warning} />
+                <T style={{ fontSize: 12, color: colors.text2 }}>{`${b.rating}${b.reviews ? ` (${b.reviews})` : ""}${b.distanceKm !== undefined ? ` · ${b.distanceKm} km` : ""}`}</T>
+              </View>
+            ) : null}
+          </View>
+          <View style={[s.foot, { flexWrap: "wrap" }]}>
+            {b.phone ? (
+              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`tel:${b.phone}`)} style={s.ghost}>
+                <Phone color={colors.text2} size={14} />
+                <T weight="medium" style={{ fontSize: 14 }}>{L("Call", "Appeler")}</T>
+              </Pressable>
+            ) : null}
+            {b.website ? (
+              <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(b.website!)} style={s.ghost}>
+                <Globe color={colors.text2} size={14} />
+                <T weight="medium" style={{ fontSize: 14 }}>{L("Website", "Site web")}</T>
+              </Pressable>
+            ) : null}
+            {b.mapUrl ? (
+              <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(b.mapUrl!)} style={s.ghost}>
+                <MapPin color={colors.text2} size={14} />
+                <T weight="medium" style={{ fontSize: 14 }}>{L("Map", "Carte")}</T>
+              </Pressable>
+            ) : null}
+          </View>
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 export function AttachmentView({ a, conversationId }: { a: Attachment; conversationId?: string }) {
   const { L } = useStore();
   switch (a.type) {
@@ -257,6 +323,7 @@ export function AttachmentView({ a, conversationId }: { a: Attachment; conversat
       return <CarResults a={a} conversationId={conversationId} />;
     case "businesses": {
       const city = findAirport(a.destinationCode)?.city ?? a.destinationCode;
+      if (a.snapshot?.businesses.length) return <Businesses r={a.snapshot} />;
       return (
         <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(mapSearchUrl(`${a.category} ${city}`))} style={[s.card, { flexDirection: "row", alignItems: "center", gap: 12 }]}>
           <MapPin color={colors.text2} size={18} />
@@ -282,5 +349,6 @@ const s = StyleSheet.create({
   book: { height: 40, paddingHorizontal: 20, borderRadius: radii.pill, alignItems: "center", justifyContent: "center" },
   ghost: { height: 40, paddingHorizontal: 14, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6 },
   source: { flexDirection: "row", alignItems: "center", gap: 6 },
+  photo: { height: 140, marginHorizontal: -16, marginBottom: 2 },
   more: { height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.pill, borderWidth: 1, borderColor: colors.borderSoft },
 });

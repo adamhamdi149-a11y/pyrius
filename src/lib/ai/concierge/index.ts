@@ -1,7 +1,9 @@
 import { placeName } from "@/lib/data/world";
 import { flightBrief, type FlightBrief } from "@/lib/flights/brief";
+import { nextStep, resultsMatch } from "@/lib/flights/workflow";
+import type { HotelBrief } from "@/lib/hotels/brief";
 import { flightMode, getProviders } from "@/lib/providers";
-import type { AgentReply, AgentStage, Attachment, CarSearchParams, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
+import type { AgentReply, AgentStage, Attachment, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
 import { contextMessage, INSTRUCTIONS, REPLY_FORMAT } from "./prompt";
 import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
 
@@ -22,8 +24,8 @@ export interface ConciergeRequest {
   results: {
     /** The flight cards the user is looking at, in the order shown. */
     flights?: { params: FlightSearchParams; sort?: "price" | "duration" | "depart"; source?: DataSource; fetchedAt?: string; shown: FlightBrief[] };
-    hotels?: HotelSearchParams;
-    cars?: CarSearchParams;
+    /** The stay cards the user is looking at, cheapest first. */
+    hotels?: { params: HotelSearchParams; shown: HotelBrief[] };
   };
   saved: SavedSummary[];
   plan: PlanId;
@@ -129,8 +131,7 @@ function finalText(output: OutputItem[]) {
 }
 
 /** The offers the user is looking at, in the order the cards show them, so "the second one" resolves. */
-async function shownResults(r: ConciergeRequest["results"]) {
-  const p = getProviders();
+function shownResults(r: ConciergeRequest["results"]) {
   const out: string[] = [];
   if (r.flights?.shown.length) {
     const live = r.flights.source === "live";
@@ -144,18 +145,13 @@ async function shownResults(r: ConciergeRequest["results"]) {
   } else if (r.flights) {
     out.push("Earlier flight results in this conversation are no longer available to you; search again if the user refers to them.");
   }
-  if (r.hotels) {
-    const list = [...(await p.hotels.search(r.hotels))].sort((x, y) => x.pricePerNight - y.pricePerNight);
+  if (r.hotels?.shown.length) {
     out.push(
-      `Example stay cards shown (cheapest first): ${list
+      `Stay cards currently shown (live from Google Hotels, ${placeName(r.hotels.params.destinationCode)}, ${r.hotels.params.checkIn} to ${r.hotels.params.checkOut}, in the order shown): ${r.hotels.shown
         .slice(0, 12)
-        .map((h, i) => `#${i + 1} id=${h.id} ${h.name} (${h.type}, ${h.stars}★, ${h.neighborhood}) ${h.pricePerNight}/night, ${h.freeCancellation ? "free cancellation" : "no free cancellation"}, ${h.breakfastIncluded ? "breakfast" : "no breakfast"}`)
+        .map((h) => `#${h.n} id=${h.id} ${h.name} (${h.type}${h.stars ? `, ${h.stars}★` : ""}${h.rating !== null ? `, rated ${h.rating}/5${h.reviews ? ` from ${h.reviews} reviews` : ""}` : ""}) ${h.per_night}/night, ${h.total} ${h.currency} for ${h.nights} nights`)
         .join("; ")}`,
     );
-  }
-  if (r.cars) {
-    const list = [...(await p.cars.search(r.cars))].sort((x, y) => x.totalPrice - y.totalPrice);
-    out.push(`Example car cards shown (cheapest first): ${list.slice(0, 8).map((c, i) => `#${i + 1} id=${c.id} ${c.category} (${c.example}) ${c.supplier}, ${c.seats} seats, ${c.transmission}, ${c.totalPrice} total`).join("; ")}`);
   }
   return out.join("\n");
 }
@@ -176,7 +172,7 @@ export async function turnStateFor(req: Pick<ConciergeRequest, "trip" | "today" 
     today: req.today,
     locale: req.locale,
     flights: results.flights?.shown.length ? { params: results.flights.params, source: results.flights.source ?? "live", fetchedAt: results.flights.fetchedAt, shown: results.flights.shown } : undefined,
-    results: { hotels: results.hotels, cars: results.cars },
+    hotels: results.hotels?.shown.length ? results.hotels : undefined,
     saved: req.saved,
     plan: req.plan,
     counts: { ...req.counts },
@@ -189,7 +185,7 @@ export async function turnStateFor(req: Pick<ConciergeRequest, "trip" | "today" 
 
 /** The per-turn facts the model gets: date, settings, the trip so far and the result cards on screen. */
 export async function turnContext(req: Pick<ConciergeRequest, "today" | "locale" | "homeAirport" | "stage" | "saved">, state: TurnState, results: ConciergeRequest["results"]) {
-  const shown = await shownResults(results).catch(() => "");
+  const shown = shownResults(results);
   const context = contextMessage({
     today: req.today,
     locale: req.locale,
@@ -198,6 +194,7 @@ export async function turnContext(req: Pick<ConciergeRequest, "today" | "locale"
     stage: req.stage,
     saved: req.saved,
     flightMode: flightMode(),
+    hasResults: Boolean(results.flights?.shown.length && resultsMatch(state.trip, [results.flights.params], req.today)),
   });
   return shown ? `${context}\n${shown}` : context;
 }
@@ -238,11 +235,18 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
   // Server-side boundary: an off-topic reply stays short and can't carry results, changes or sources.
   const offTopic = final.topic === "off_topic" && state.toolCalls === 0;
   const reply = offTopic ? clip(final.reply, 280) : clip(final.reply, 1400);
-  const chips: Chip[] = [...new Set(final.suggestions.map((s) => s.trim()).filter((s) => s && s.length <= 48))]
-    .slice(0, 3)
-    .map((label) => ({ label, action: { type: "say", text: label } }));
-
   const t = state.trip;
+  // While flight details are being collected the app shows the workflow's own control, so the model's
+  // suggestions are dropped; afterwards only specific ones are kept.
+  const flightResultsOnScreen = state.searched === "flights" || Boolean(results.flights?.shown.length && resultsMatch(t, [results.flights.params], req.today));
+  const collecting = nextStep(t, flightResultsOnScreen) !== "results" && state.searched !== "hotels" && !results.hotels;
+  // With flight results on screen, the app shows its own refinements (Cheapest, Fastest, Fewest stops…).
+  const chips: Chip[] = collecting || flightResultsOnScreen
+    ? []
+    : [...new Set(final.suggestions.map((s) => s.trim()).filter((s) => s && s.length <= 48 && !GENERIC.test(s)))]
+        .slice(0, 3)
+        .map((label) => ({ label, action: { type: "say", text: label } }));
+
   const stage: AgentStage = state.searched ?? (req.stage === "collecting" || !req.stage ? "collecting" : req.stage);
   const attachments: Attachment[] = offTopic ? [] : state.attachments;
   return {
@@ -257,6 +261,9 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     engine: "openai",
   };
 }
+
+/** Suggestions that never help someone finish a search. */
+const GENERIC = /^(tell me more|sounds good|surprise me|ok(ay)?|yes|no|thanks?|thank you|continue|go ahead|great|perfect|cool)[.!]?$/i;
 
 function clip(s: string, max: number) {
   if (s.length <= max) return s;
