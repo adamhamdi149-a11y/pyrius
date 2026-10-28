@@ -12,6 +12,8 @@ export { isEmail };
 
 function friendly(message: string) {
   if (/rate limit|security purposes|seconds/i.test(message)) return "Too many codes requested. Wait a minute, then try again.";
+  // Supabase couldn't deliver the email (its built-in sender only reaches the project team; a custom SMTP sender fixes it).
+  if (/sending.*email|smtp/i.test(message)) return "We couldn't send the email right now. Please try again in a few minutes.";
   if (/expired|invalid/i.test(message)) return "That code didn't work. Check it, or ask for a new one.";
   if (/network|fetch/i.test(message)) return "Can't reach Pyrius. Check your connection and try again.";
   return message;
