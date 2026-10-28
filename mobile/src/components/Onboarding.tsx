@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeyboardPadding } from "~/lib/keyboard";
@@ -28,7 +28,10 @@ export function OnboardingScreen({ step, back, children, footer, background }: {
         {step ? <StepDots step={step} /> : null}
         <View style={s.side} />
       </View>
-      <View style={s.body}>{children}</View>
+      {/* The content scrolls when space runs out (keyboard open, small phones) so it never slides under the buttons. */}
+      <ScrollView style={s.body} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
+        {children}
+      </ScrollView>
       <Animated.View style={[s.footer, pad]}>{footer}</Animated.View>
     </View>
   );
@@ -39,5 +42,6 @@ const s = StyleSheet.create({
   top: { height: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   side: { width: 44 },
   body: { flex: 1 },
-  footer: { gap: 10 },
+  content: { flexGrow: 1, paddingBottom: 16 },
+  footer: { gap: 10, paddingTop: 8 },
 });

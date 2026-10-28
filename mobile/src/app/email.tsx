@@ -7,6 +7,7 @@ import { OnboardingScreen } from "~/components/Onboarding";
 import { toast } from "~/components/Toast";
 import { Headline, OutlineButton, PrimaryButton, Rise, T, useAccent } from "~/components/ui";
 import { isEmail, sendEmailCode, signInWithProvider } from "~/lib/auth";
+import { useKeyboardVisible } from "~/lib/keyboard";
 import { API_URL } from "~/lib/config";
 import { useStore } from "~/lib/store";
 import { enabledProviders } from "~/lib/supabase";
@@ -52,7 +53,9 @@ export default function Email() {
     }
   };
 
-  const social = providers.google || providers.apple;
+  const typing = useKeyboardVisible();
+  // While the keyboard is open, only Continue stays under the field; the rest comes back when it closes.
+  const social = (providers.google || providers.apple) && !typing;
 
   return (
     <OnboardingScreen
@@ -74,6 +77,7 @@ export default function Email() {
               </View>
             </>
           ) : null}
+          {typing ? null : (
           <T style={s.legal}>
             {L("By continuing you accept the ", "En continuant, vous acceptez les ")}
             <T style={s.link} onPress={() => WebBrowser.openBrowserAsync(`${API_URL}/legal/terms`)} accessibilityRole="link">
@@ -85,10 +89,11 @@ export default function Email() {
             </T>
             .
           </T>
+          )}
         </Rise>
       }
     >
-      <Rise style={{ marginTop: 56, marginBottom: 36 }}>
+      <Rise style={{ marginTop: typing ? 20 : 56, marginBottom: typing ? 24 : 36 }}>
         <Headline before={L("Your", "Votre")} serif={L("email", "courriel")} />
       </Rise>
       <Rise i={1} style={{ gap: 10 }}>
