@@ -34,7 +34,7 @@ function MenuGlyph() {
 
 export default function Chat() {
   const store = useStore();
-  const { L, settings, activeId, conversations } = store;
+  const { L, settings, activeId, conversations, signOut } = store;
   const engine = useConversationEngine();
   const insets = useSafeAreaInsets();
   const pad = useKeyboardPadding(8);
@@ -94,13 +94,13 @@ export default function Chat() {
       } catch (e) {
         flashFor("error");
         // A signed-out or expired session: the message stays in the conversation; sign in again to continue.
-        if (e instanceof ApiError && e.status === 401) router.replace("/welcome");
+        if (e instanceof ApiError && e.status === 401) signOut();
         setError({ convId: id, text, action, message: e instanceof ApiError ? e.message : undefined });
       } finally {
         setPending(false);
       }
     },
-    [engine],
+    [engine, signOut],
   );
 
   const send = (text: string, action?: ChipAction) => {

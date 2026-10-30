@@ -7,12 +7,42 @@ import { SupabaseRepository, type PersistedState, type Repository } from "@/lib/
 import { trackerFromOffer } from "@/lib/tracking/trackers";
 import type { AnyOffer, Conversation, PriceTracker, SavedOffer, Subscription, UserSettings, VoiceSettings } from "@/lib/types";
 import { supabaseConfigured } from "./config";
+import { PENDING_CODE_MAX_AGE, phaseOf, type PendingCode, type Phase } from "./flow";
 import { supabase } from "./supabase";
 
 export const DEFAULT_VOICE: VoiceSettings = { enabled: true, voice: "marin", spoken: true, textOnly: false };
 
 const LOCAL_KEY = "pyrius:mobile:v1";
 const ONBOARDED_KEY = "pyrius:onboarded:v1";
+const PENDING_KEY = "pyrius:pending-code:v1";
+
+/** Startup never waits longer than this on the network: past it, the app opens with what it has. */
+const STARTUP_TIMEOUT = 6000;
+
+function within<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const id = setTimeout(() => resolve(fallback), ms);
+    p.then(
+      (v) => {
+        clearTimeout(id);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(id);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+async function readPending(): Promise<PendingCode | null> {
+  try {
+    const v = JSON.parse((await AsyncStorage.getItem(PENDING_KEY)) ?? "null") as PendingCode | null;
+    return v && typeof v.email === "string" && Date.now() - v.sentAt < PENDING_CODE_MAX_AGE ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Signed-out or unconfigured mode: data stays on this device only. */
 class DeviceRepository implements Repository {
@@ -52,8 +82,14 @@ export type AuthState = { mode: "local" } | { mode: "signed-out" } | { mode: "cl
 type Result = { ok: true } | { ok: false; message: string };
 
 interface Store {
+  /** True once sign-in, setup and data are known; the layout keeps the splash up until then. */
   ready: boolean;
   auth: AuthState;
+  /** Which part of the app the person belongs in now (see flow.ts). */
+  phase: Phase;
+  /** A sign-in code sent to this email and not yet entered: the app reopens on the code screen. */
+  pendingCode: PendingCode | null;
+  setPendingCode: (email: string | null) => void;
   settings: UserSettings;
   voice: VoiceSettings;
   subscription: Subscription;
@@ -91,7 +127,9 @@ function deviceLocale(): UserSettings["locale"] {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [localLoaded, setLocalLoaded] = useState(false);
+  const [pendingCode, setPendingState] = useState<PendingCode | null>(null);
   const [auth, setAuth] = useState<AuthState>({ mode: supabaseConfigured ? "signed-out" : "local" });
   const [settings, setSettings] = useState<UserSettings>({ ...DEFAULT_SETTINGS, locale: deviceLocale() });
   const [subscription, setSubscription] = useState<Subscription>(DEFAULT_SUBSCRIPTION);
@@ -115,22 +153,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  /**
+   * Loads a repository's data. The app opens after at most STARTUP_TIMEOUT even on a bad connection;
+   * if the data arrives later it still fills in, unless the person has signed in or out since.
+   */
   const hydrate = useCallback(async (r: Repository) => {
     repo.current = r;
-    const data: PersistedState = await r.load().catch((err: Error) => {
-      setSyncError(err.message);
-      return {};
+    const apply = (data: PersistedState) => {
+      if (repo.current !== r) return;
+      setSettings((s) => ({ ...DEFAULT_SETTINGS, locale: s.locale, ...(data.settings ?? {}) }));
+      setConversations((data.conversations ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      setSaved(data.saved ?? []);
+      setTrackers(data.trackers ?? []);
+      setSubscription(data.subscription ?? DEFAULT_SUBSCRIPTION);
+    };
+    const load = r.load().then(apply, (err: Error) => {
+      if (repo.current === r) setSyncError(err.message || "Couldn't load your data.");
     });
-    setSettings((s) => ({ ...DEFAULT_SETTINGS, locale: s.locale, ...(data.settings ?? {}) }));
-    setConversations((data.conversations ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-    setSaved(data.saved ?? []);
-    setTrackers(data.trackers ?? []);
-    setSubscription(data.subscription ?? DEFAULT_SUBSCRIPTION);
-    setReady(true);
+    await within(load, STARTUP_TIMEOUT, undefined);
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem(ONBOARDED_KEY).then((v) => setOnboardedState(v === "1"), () => {});
+    // Device-only state the first screen depends on: read before the app opens.
+    Promise.all([AsyncStorage.getItem(ONBOARDED_KEY).catch(() => null), readPending()]).then(([done, pending]) => {
+      setOnboardedState(done === "1");
+      setPendingState(pending);
+      setLocalLoaded(true);
+    });
     if (!supabase) {
       // hydrate() only sets state after loading from storage, never synchronously here.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -144,17 +194,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       current = id;
       if (session) {
         setAuth({ mode: "cloud", userId: session.user.id, email: session.user.email });
-        hydrate(new SupabaseRepository(supabase!, session.user.id));
+        // Signed in: the code has done its job.
+        setPendingState(null);
+        AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
+        // Outside the auth callback: Supabase queries made inside it can wait on the auth lock.
+        setTimeout(() => hydrate(new SupabaseRepository(supabase!, session.user.id)), 0);
       } else {
         setAuth({ mode: "signed-out" });
         setActiveId(null);
-        hydrate(new DeviceRepository());
+        setTimeout(() => hydrate(new DeviceRepository()), 0);
       }
     };
-    supabase.auth.getSession().then(({ data }) => onSession(data.session), () => onSession(null));
+    // A stored session that needs refreshing goes to the network; don't let that hold the app closed.
+    within(supabase.auth.getSession(), STARTUP_TIMEOUT, { data: { session: null }, error: null }).then(({ data }) => {
+      if (data.session || current === undefined) onSession(data.session);
+    });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => onSession(session));
     return () => data.subscription.unsubscribe();
   }, [hydrate]);
+
+  const ready = hydrated && localLoaded;
+  const phase = phaseOf(auth, onboarded);
+
+  const setPendingCode = useCallback((email: string | null) => {
+    const next = email ? { email, sentAt: Date.now() } : null;
+    setPendingState(next);
+    if (next) AsyncStorage.setItem(PENDING_KEY, JSON.stringify(next)).catch(() => {});
+    else AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
+  }, []);
 
   const L = useCallback((en: string, fr: string) => (settings.locale === "fr" ? fr : en), [settings.locale]);
 
@@ -270,6 +337,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store = {
     ready,
     auth,
+    phase,
+    pendingCode,
+    setPendingCode,
     settings,
     voice,
     subscription,

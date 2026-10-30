@@ -25,6 +25,23 @@ npx expo start                 # scan the QR code with Expo Go (Android) or the 
 Never put the OpenAI, SerpApi, Stripe secret or Supabase service-role keys here: everything named
 `EXPO_PUBLIC_` is built into the app.
 
+## How the screens connect
+
+`src/lib/flow.ts` is the one map of the app. Each screen belongs to a phase, and the root layout
+(`src/app/_layout.tsx`) guards the screens with `Stack.Protected`:
+
+| Phase | Screens, in order |
+| --- | --- |
+| signed-out | welcome → email → code |
+| setup | alerts → location → light |
+| app | chat, settings, saved, tracking, voice |
+
+Signing in, finishing setup or signing out changes the phase. The router then closes the old phase's
+screens and `index` opens the first screen of the new one, so no screen hard-codes where to go next.
+The native splash stays up until sign-in and setup state are loaded (never longer than 6 seconds on a
+bad connection). A code that was sent but not entered yet is remembered for an hour: if the app closes
+while you read the email, it reopens on the code screen.
+
 ## Voice: Expo Go vs the Pyrius build
 
 | | Expo Go | Pyrius development / store build |

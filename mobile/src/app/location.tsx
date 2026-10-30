@@ -8,6 +8,7 @@ import { OnboardingScreen } from "~/components/Onboarding";
 import { toast } from "~/components/Toast";
 import { Headline, PrimaryButton, Rise, T, TextButton, useAccent } from "~/components/ui";
 import { findAirport, nearestAirport } from "@/lib/data/world";
+import { nextSetupStep } from "~/lib/flow";
 import { useStore } from "~/lib/store";
 import { colors, radii } from "~/lib/theme";
 
@@ -53,7 +54,7 @@ export default function LocationScreen() {
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  const next = () => router.push("/light");
+  const next = () => router.push(nextSetupStep("/location")!);
 
   const choose = (code: string) => {
     updateSettings({ homeAirport: code });
@@ -86,6 +87,7 @@ export default function LocationScreen() {
   return (
     <OnboardingScreen
       step={4}
+      back
       footer={
         <Rise i={2} style={{ gap: 10 }}>
           <PrimaryButton label={found ? L("Continue", "Continuer") : L("Use my location", "Utiliser ma position")} onPress={found ? next : useLocation} busy={busy} />

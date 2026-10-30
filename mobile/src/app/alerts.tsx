@@ -10,6 +10,7 @@ import { OnboardingScreen } from "~/components/Onboarding";
 import { toast } from "~/components/Toast";
 import { Headline, PrimaryButton, Rise, T, TextButton, useAccent } from "~/components/ui";
 import { placeName } from "@/lib/data/world";
+import { nextSetupStep } from "~/lib/flow";
 import { useStore } from "~/lib/store";
 import { colors, radii } from "~/lib/theme";
 
@@ -59,7 +60,7 @@ function Illustration() {
 export default function Alerts() {
   const { L, settings, updateSettings } = useStore();
   const [busy, setBusy] = useState(false);
-  const next = () => router.push("/location");
+  const next = () => router.push(nextSetupStep("/alerts")!);
 
   const allow = async () => {
     setBusy(true);
