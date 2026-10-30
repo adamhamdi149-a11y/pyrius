@@ -1,9 +1,7 @@
-import * as Notifications from "expo-notifications";
-import { AndroidImportance } from "expo-notifications";
 import { router } from "expo-router";
 import { ArrowDown } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glow } from "~/components/Glow";
 import { OnboardingScreen } from "~/components/Onboarding";
@@ -11,6 +9,7 @@ import { toast } from "~/components/Toast";
 import { Headline, PrimaryButton, Rise, T, TextButton, useAccent } from "~/components/ui";
 import { placeName } from "@/lib/data/world";
 import { nextSetupStep } from "~/lib/flow";
+import { requestNotificationPermission } from "~/lib/notifications";
 import { useStore } from "~/lib/store";
 import { colors, radii } from "~/lib/theme";
 
@@ -65,10 +64,7 @@ export default function Alerts() {
   const allow = async () => {
     setBusy(true);
     try {
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("price-alerts", { name: L("Price alerts", "Alertes de prix"), importance: AndroidImportance.DEFAULT });
-      }
-      const { granted } = await Notifications.requestPermissionsAsync();
+      const granted = (await requestNotificationPermission(L("Price alerts", "Alertes de prix"))) === "granted";
       updateSettings({ notifications: { ...settings.notifications, priceAlerts: granted } });
       if (!granted) toast({ title: L("Alerts are off", "Alertes désactivées"), description: L("You can turn them on later in Settings.", "Vous pourrez les activer plus tard dans les réglages.") });
     } catch {

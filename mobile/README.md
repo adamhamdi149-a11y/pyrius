@@ -48,6 +48,7 @@ while you read the email, it reopens on the code screen.
 | --- | --- | --- |
 | Chat, onboarding, flights, menu, settings | yes | yes |
 | Dictation (mic button in the chat bar) | yes | yes |
+| Notification permission | Android: the system permission only (expo-notifications is not loaded, see `src/lib/notifications.ts`) | yes |
 | Voice conversation | take turns: Pyrius listens until you pause, answers through the text concierge, reads the answer aloud | live speech-to-speech (OpenAI Realtime over WebRTC): talk naturally, interrupt any time |
 
 Live voice uses `react-native-webrtc`, a native module Expo Go doesn't include. Build the app once
