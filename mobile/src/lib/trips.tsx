@@ -28,6 +28,14 @@ interface TripsCtx {
 const Ctx = createContext<TripsCtx | null>(null);
 
 const deviceKey = (who: string) => `pyrius:trips:v1:${who}`;
+async function readDevice(key: string): Promise<Trip[]> {
+  try {
+    return JSON.parse((await AsyncStorage.getItem(key)) ?? "[]") as Trip[];
+  } catch {
+    return [];
+  }
+}
+
 /** PostgREST's answer when a table doesn't exist yet. */
 const missingTable = (e: { code?: string; message?: string } | null) => Boolean(e && (e.code === "PGRST205" || e.code === "42P01" || /does not exist|schema cache/i.test(e.message ?? "")));
 
@@ -60,17 +68,27 @@ export function TripsProvider({ children }: { children: ReactNode }) {
             const trip = row.data as Trip;
             return { ...trip, reservations: byTrip.get(trip.id) ?? [] };
           });
+          // Trips planned on this phone before the account could hold them move into the account, once.
+          const local = await readDevice(deviceKey(userId));
+          const moving = local.filter((x) => !loaded!.some((y) => y.id === x.id));
+          if (moving.length) {
+            const { error } = await supabase.from("trips").upsert(
+              moving.map(({ reservations: _r, ...data }) => ({ id: data.id, user_id: userId, data, start_date: data.startDate ?? null, updated_at: data.updatedAt })),
+            );
+            if (!error) {
+              loaded = [...loaded, ...moving.map((x) => ({ ...x, reservations: [] }))];
+              await AsyncStorage.removeItem(deviceKey(userId)).catch(() => {});
+            } else {
+              console.warn("[trips] moving trips to the account failed:", error.message);
+            }
+          } else if (local.length) {
+            await AsyncStorage.removeItem(deviceKey(userId)).catch(() => {});
+          }
         } else if (!missingTable(t.error)) {
           console.warn("[trips] load failed:", t.error.message);
         }
       }
-      if (!loaded) {
-        try {
-          loaded = JSON.parse((await AsyncStorage.getItem(deviceKey(who))) ?? "[]") as Trip[];
-        } catch {
-          loaded = [];
-        }
-      }
+      if (!loaded) loaded = await readDevice(deviceKey(who));
       if (!live) return;
       setStorage(where);
       apply(loaded);
