@@ -11,19 +11,69 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { LaunchOverlay } from "~/components/LaunchOverlay";
 import { ToastHost } from "~/components/Toast";
-import { StoreProvider } from "~/lib/store";
+import { StoreProvider, useStore } from "~/lib/store";
+import { TripsProvider } from "~/lib/trips";
 import { colors } from "~/lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
 
-export default function RootLayout() {
-  const [loaded, error] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, GeistMono_500Medium, InstrumentSerif_400Regular_Italic });
+/**
+ * Every screen belongs to one phase of flow.ts. When sign-in or setup state changes, the screens of the
+ * old phase close and the router goes back to "index", which opens the right screen for the new phase.
+ * No screen has to know where the person goes after it signs in, finishes setup or signs out.
+ */
+function Screens() {
+  const { ready, phase, auth } = useStore();
+  const local = auth.mode === "local";
 
   useEffect(() => {
-    if (loaded || error) SplashScreen.hideAsync().catch(() => {});
-  }, [loaded, error]);
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+
+  // The native splash stays up until the first screen is known.
+  if (!ready) return null;
+
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: "slide_from_right" }}>
+        <Stack.Screen name="index" options={{ animation: "none" }} />
+        <Stack.Screen name="auth/callback" options={{ animation: "none" }} />
+        <Stack.Protected guard={phase === "signed-out" || (local && phase === "setup")}>
+          <Stack.Screen name="welcome" options={{ animation: "fade" }} />
+        </Stack.Protected>
+        <Stack.Protected guard={phase === "signed-out"}>
+          <Stack.Screen name="email" />
+          <Stack.Screen name="code" />
+        </Stack.Protected>
+        <Stack.Protected guard={phase === "setup"}>
+          <Stack.Screen name="alerts" options={{ animation: "fade", gestureEnabled: false }} />
+          <Stack.Screen name="location" />
+          <Stack.Screen name="light" />
+        </Stack.Protected>
+        <Stack.Protected guard={phase === "app"}>
+          <Stack.Screen name="chat" options={{ animation: "fade", gestureEnabled: false }} />
+          <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="saved" />
+          <Stack.Screen name="tracking" />
+          <Stack.Screen name="trips/index" />
+          <Stack.Screen name="trips/[id]" />
+          <Stack.Screen name="explore/index" options={{ animation: "fade" }} />
+          <Stack.Screen name="explore/play" options={{ animation: "fade", gestureEnabled: false }} />
+          <Stack.Screen name="explore/results" options={{ animation: "fade" }} />
+          <Stack.Screen name="explore/[id]" />
+        </Stack.Protected>
+      </Stack>
+      <LaunchOverlay />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  const [loaded, error] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, GeistMono_500Medium, InstrumentSerif_400Regular_Italic });
 
   if (!loaded && !error) return null;
 
@@ -32,14 +82,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StoreProvider>
           <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: "fade" }}>
-            <Stack.Screen name="index" options={{ animation: "none" }} />
-            <Stack.Screen name="chat" options={{ animation: "fade", gestureEnabled: false }} />
-            <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
-            <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
-            <Stack.Screen name="saved" options={{ animation: "slide_from_right" }} />
-            <Stack.Screen name="tracking" options={{ animation: "slide_from_right" }} />
-          </Stack>
+          <TripsProvider>
+            <Screens />
+          </TripsProvider>
           <ToastHost />
         </StoreProvider>
       </SafeAreaProvider>

@@ -25,12 +25,30 @@ npx expo start                 # scan the QR code with Expo Go (Android) or the 
 Never put the OpenAI, SerpApi, Stripe secret or Supabase service-role keys here: everything named
 `EXPO_PUBLIC_` is built into the app.
 
+## How the screens connect
+
+`src/lib/flow.ts` is the one map of the app. Each screen belongs to a phase, and the root layout
+(`src/app/_layout.tsx`) guards the screens with `Stack.Protected`:
+
+| Phase | Screens, in order |
+| --- | --- |
+| signed-out | welcome → email → code |
+| setup | alerts → location → light |
+| app | chat, settings, saved, tracking, voice |
+
+Signing in, finishing setup or signing out changes the phase. The router then closes the old phase's
+screens and `index` opens the first screen of the new one, so no screen hard-codes where to go next.
+The native splash stays up until sign-in and setup state are loaded (never longer than 6 seconds on a
+bad connection). A code that was sent but not entered yet is remembered for an hour: if the app closes
+while you read the email, it reopens on the code screen.
+
 ## Voice: Expo Go vs the Pyrius build
 
 | | Expo Go | Pyrius development / store build |
 | --- | --- | --- |
 | Chat, onboarding, flights, menu, settings | yes | yes |
 | Dictation (mic button in the chat bar) | yes | yes |
+| Notification permission | Android: the system permission only (expo-notifications is not loaded, see `src/lib/notifications.ts`) | yes |
 | Voice conversation | take turns: Pyrius listens until you pause, answers through the text concierge, reads the answer aloud | live speech-to-speech (OpenAI Realtime over WebRTC): talk naturally, interrupt any time |
 
 Live voice uses `react-native-webrtc`, a native module Expo Go doesn't include. Build the app once
@@ -106,6 +124,27 @@ npx expo export --platform ios --platform android   # bundles the app the way a 
 Device tests still to do on a real phone: the email code, microphone permission (allow and deny),
 a live voice session (talk, interrupt, mute, type in voice, end), a flight search by voice, the
 Book button, and the take-turns mode in Expo Go.
+
+## Explore, My Trips and attachments
+
+- **Explore** (`src/app/explore/`): a discovery game of 12 visual questions. The engine is shared code in
+  `../src/lib/explore/` (traits, questions, a catalog of real destinations, scoring and personalities,
+  with tests): answers become a trait profile, destinations are ranked by how well they match it on the
+  traits the person expressed, and every pick is explained by the traits that matched. Budgets are
+  categories, never prices. "Flights" and "Search flights" open the chat with the request already sent
+  (`src/lib/handoff.ts`). Answers, past discoveries and saved places live in the user's settings.
+- **My Trips** (`src/app/trips/`): trips with Flights, Hotels and Rental cars. Shared model and logic in
+  `../src/lib/trips/` (`placeReservation` files a confirmed booking under its trip; `providers/duffel.ts`
+  turns a Duffel order into a reservation). Reservations are written only by the server when a provider
+  confirms a booking (Duffel for flights, Booking.com for hotels and cars, not connected yet), so the
+  app never shows a booking that doesn't exist. Run `supabase/migrations/0002_trips.sql` in the Supabase
+  SQL editor to keep trips in the account; until then planned trips stay on the phone.
+- **Photos** of places come from Wikimedia Commons (`src/lib/photos.ts`), looked up once and cached.
+- **Attachments**: the chat bar's + adds photos (camera or library) and files (PDF, text). Photos are
+  resized on the phone; files go to the AI with that message only (`../src/lib/ai/concierge/uploads.ts`)
+  and aren't stored by Pyrius.
+- **Voices**: pick one voice for English and one for French in Settings or the voice screen, with a
+  preview of each. The server's allowlist is in `../src/lib/ai/voice/index.ts`.
 
 ## Not included yet
 

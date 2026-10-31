@@ -1,4 +1,4 @@
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioRecorder } from "expo-audio";
+import { createAudioPlayer, getRecordingPermissionsAsync, setAudioModeAsync, type AudioPlayer, type AudioRecorder } from "expo-audio";
 import type { VoiceCallbacks, VoiceEngine } from "./types";
 
 /** dBFS from the recorder → 0–1. */
@@ -30,6 +30,8 @@ export class TurnVoice implements VoiceEngine {
   private closed = false;
   private muted = false;
   private busy = false;
+  /** True while the recorder is prepared or recording. Android refuses to prepare it twice. */
+  private listening = false;
 
   constructor(private cb: VoiceCallbacks, private deps: Deps) {}
 
@@ -44,16 +46,36 @@ export class TurnVoice implements VoiceEngine {
     this.poll = null;
   }
 
+  /** Stops the recorder if it's on. Safe to call at any time. */
+  private async release() {
+    this.clearPoll();
+    if (!this.listening) return;
+    this.listening = false;
+    await this.deps.recorder.stop().catch(() => {});
+  }
+
   private async listen() {
-    if (this.closed || this.muted) return;
+    if (this.closed || this.muted || this.listening) return;
+    this.listening = true;
     const r = this.deps.recorder;
     try {
       await r.prepareToRecordAsync();
       r.record();
     } catch {
-      this.cb.onError("The microphone couldn't start.", "permission");
-      return;
+      // A recorder left prepared (an earlier session or dictation) blocks a new one: release it and retry once.
+      try {
+        await r.stop().catch(() => {});
+        await r.prepareToRecordAsync();
+        r.record();
+      } catch (e) {
+        this.listening = false;
+        const perm = await getRecordingPermissionsAsync().catch(() => null);
+        if (perm && !perm.granted) this.cb.onError("Pyrius needs the microphone to talk with you.", "permission");
+        else this.cb.onError(`The microphone couldn't start${__DEV__ ? ` (${(e as Error).message})` : ""}. Close other apps using it and try again.`, "connection");
+        return;
+      }
     }
+    if (this.closed || this.muted) return this.release();
     this.cb.onStatus("listening");
     let heard = 0;
     let speaking = false;
@@ -80,16 +102,14 @@ export class TurnVoice implements VoiceEngine {
   }
 
   private async restart() {
-    this.clearPoll();
-    await this.deps.recorder.stop().catch(() => {});
+    await this.release();
     this.listen();
   }
 
   private async endTurn() {
-    this.clearPoll();
     this.cb.onUserSpeaking(false);
     this.cb.onStatus("thinking");
-    await this.deps.recorder.stop().catch(() => {});
+    await this.release();
     const uri = this.deps.recorder.uri;
     if (!uri || this.closed) return;
     let text = "";
@@ -157,10 +177,10 @@ export class TurnVoice implements VoiceEngine {
   }
 
   setMuted(muted: boolean) {
+    if (muted === this.muted) return;
     this.muted = muted;
     if (muted) {
-      this.clearPoll();
-      this.deps.recorder.stop().catch(() => {});
+      this.release();
       this.cb.onLevels(0, 0);
     } else if (!this.player && !this.busy) {
       this.listen();
@@ -168,8 +188,7 @@ export class TurnVoice implements VoiceEngine {
   }
 
   async sendText(text: string) {
-    this.clearPoll();
-    await this.deps.recorder.stop().catch(() => {});
+    await this.release();
     this.player?.pause();
     this.player?.remove();
     this.player = null;
@@ -178,8 +197,7 @@ export class TurnVoice implements VoiceEngine {
 
   stop() {
     this.closed = true;
-    this.clearPoll();
-    this.deps.recorder.stop().catch(() => {});
+    this.release();
     this.player?.remove();
     this.player = null;
     setAudioModeAsync({ allowsRecording: false }).catch(() => {});

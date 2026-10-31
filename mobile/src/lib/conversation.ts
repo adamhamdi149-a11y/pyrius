@@ -9,6 +9,7 @@ import { money, toISODate, uid } from "@/lib/utils";
 import { toast } from "~/components/Toast";
 import { api } from "./api";
 import { useStore } from "./store";
+import type { PendingUpload } from "./uploads";
 
 /**
  * One conversation engine for text and voice. Both read the same conversation (trip, results on
@@ -61,7 +62,8 @@ export function useConversationEngine() {
         locale: settings.locale,
         homeAirport: settings.homeAirport,
         today: toISODate(new Date()),
-        history: earlier.slice(-12).map((m) => ({ role: m.role, content: m.text })),
+        // Files go to the AI with their own message only; later turns know they were sent.
+        history: earlier.slice(-12).map((m) => ({ role: m.role, content: m.uploads?.length ? `${m.text}\n[Attached: ${m.uploads.map((u) => u.name).join(", ")}]`.trim() : m.text })),
         ...contextFor(c),
       };
     },
@@ -137,12 +139,13 @@ export function useConversationEngine() {
     [store],
   );
 
-  /** Sends a typed (or dictated) message to the concierge and appends its reply. */
+  /** Sends a typed (or dictated) message, with any photos and files, to the concierge and appends its reply. */
   const ask = useCallback(
-    async (convId: string, text: string, action?: ChipAction) => {
+    async (convId: string, text: string, action?: ChipAction, files?: PendingUpload[]) => {
       const c = store.getConversation(convId);
       if (!c) throw new Error("Conversation not found");
-      const reply = await api<AgentReply>("/api/chat", { message: text, action, ...basePayload(c) });
+      const uploads = files?.length ? files.map((f) => ({ name: f.name, type: f.type, data: f.data })) : undefined;
+      const reply = await api<AgentReply>("/api/chat", { message: text, action, uploads, ...basePayload(c) });
       const attachments = reply.attachments ?? (reply.attachment ? [reply.attachment] : undefined);
       const res = append(convId, { role: "assistant", text: reply.reply, chips: reply.chips, attachments, sources: reply.sources }, { prefs: reply.prefs, stage: reply.stage as AgentStage, title: reply.title ?? c.title });
       if (res) applyActions(reply.actions, res.conversation);

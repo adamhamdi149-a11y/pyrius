@@ -14,7 +14,7 @@ import { enabledProviders } from "~/lib/supabase";
 import { colors, fonts, radii, noOutline } from "~/lib/theme";
 
 export default function Email() {
-  const { L, onboarded } = useStore();
+  const { L, setPendingCode } = useStore();
   const accent = useAccent();
   const [email, setEmail] = useState("");
   const [focused, setFocused] = useState(false);
@@ -33,8 +33,11 @@ export default function Email() {
     setBusy("email");
     setError(null);
     try {
-      await sendEmailCode(email);
-      router.push({ pathname: "/code", params: { email: email.trim().toLowerCase() } });
+      const address = email.trim().toLowerCase();
+      await sendEmailCode(address);
+      // Remembered so the app reopens on the code screen if it closes while the person checks their mail.
+      setPendingCode(address);
+      router.push({ pathname: "/code", params: { email: address } });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -45,7 +48,8 @@ export default function Email() {
   const oauth = async (p: "google" | "apple") => {
     setBusy(p);
     try {
-      if (await signInWithProvider(p)) router.replace(onboarded ? "/chat" : "/alerts");
+      // Signed in: the layout's guards open setup or the chat.
+      await signInWithProvider(p);
     } catch (e) {
       toast({ tone: "error", title: (e as Error).message });
     } finally {
@@ -61,6 +65,7 @@ export default function Email() {
     <OnboardingScreen
       step={1}
       back
+      backTo="/welcome"
       footer={
         <Rise i={2} style={{ gap: 12 }}>
           <PrimaryButton label={L("Continue", "Continuer")} onPress={submit} busy={busy === "email"} disabled={!valid} />

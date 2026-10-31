@@ -2,7 +2,7 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking } from "react-native";
 import { toast } from "~/components/Toast";
-import { api, ApiError } from "./api";
+import { apiUpload, ApiError } from "./api";
 import { useStore } from "./store";
 
 const MAX_SECONDS = 60;
@@ -18,7 +18,7 @@ const level = (db?: number) => (db === undefined ? 0 : Math.max(0, Math.min(1, (
  * the text in the composer so they can check it before sending. Nothing is recorded until they tap.
  */
 export function useDictation(onText: (text: string) => void) {
-  const { L, settings } = useStore();
+  const { L } = useStore();
   const recorder = useAudioRecorder(OPTIONS);
   const [state, setState] = useState<DictationState>("idle");
   const [levels, setLevels] = useState<number[]>([]);
@@ -58,10 +58,13 @@ export function useDictation(onText: (text: string) => void) {
         setSeconds(s);
         if (s >= MAX_SECONDS) stopRef.current(true);
       }, 100);
-    } catch {
+    } catch (e) {
       clear();
       setState("idle");
-      toast({ tone: "error", title: L("The microphone couldn't start", "Le micro n'a pas pu démarrer") });
+      // Another recording (voice mode) may still hold the microphone; release ours so the next tap works.
+      await recorder.stop().catch(() => {});
+      if (__DEV__) console.warn("[dictation] start failed:", (e as Error).message);
+      toast({ tone: "error", title: L("The microphone is busy", "Le micro est occupé"), description: L("Close voice mode or other apps using it, then try again.", "Fermez le mode vocal ou les autres apps qui l'utilisent, puis réessayez.") });
     }
   }, [state, recorder, L]);
 
@@ -80,10 +83,7 @@ export function useDictation(onText: (text: string) => void) {
       }
       setState("transcribing");
       try {
-        const form = new FormData();
-        form.append("audio", { uri, name: "dictation.m4a", type: "audio/m4a" } as unknown as Blob);
-        form.append("language", settings.locale);
-        const { text } = await api<{ text: string }>("/api/voice/transcribe", undefined, { form });
+        const { text } = await apiUpload<{ text: string }>("/api/voice/transcribe", [{ field: "audio", uri, name: "dictation.m4a", type: "audio/mp4" }]);
         if (text) onText(text);
         else toast({ title: L("I didn't catch anything", "Je n'ai rien entendu"), description: L("Try again a little closer to the phone.", "Réessayez plus près du téléphone.") });
       } catch (e) {
@@ -92,7 +92,7 @@ export function useDictation(onText: (text: string) => void) {
         setState("idle");
       }
     },
-    [state, recorder, settings.locale, onText, L],
+    [state, recorder, onText, L],
   );
   useEffect(() => {
     stopRef.current = stop;

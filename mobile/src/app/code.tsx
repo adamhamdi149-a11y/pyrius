@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { Mail } from "lucide-react-native";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Linking, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -24,7 +24,7 @@ function Caret({ color }: { color: string }) {
 
 export default function Code() {
   const { email = "" } = useLocalSearchParams<{ email: string }>();
-  const { L, onboarded, updateSettings } = useStore();
+  const { L, updateSettings, setPendingCode } = useStore();
   const accent = useAccent();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [code, setCode] = useState("");
@@ -46,11 +46,10 @@ export default function Code() {
     try {
       await verifyEmailCode(String(email), value);
       updateSettings({ email: String(email) });
-      router.replace(onboarded ? "/chat" : "/alerts");
+      // Signed in: the layout's guards close the sign-in screens and open setup (or the chat).
     } catch (e) {
       setError((e as Error).message);
       setCode("");
-    } finally {
       setBusy(false);
     }
   };
@@ -58,6 +57,7 @@ export default function Code() {
   const resend = async () => {
     try {
       await sendEmailCode(String(email));
+      setPendingCode(String(email));
       setWait(RESEND_AFTER);
       toast({ tone: "ok", title: L("New code sent", "Nouveau code envoyé") });
     } catch (e) {
@@ -72,6 +72,8 @@ export default function Code() {
     <OnboardingScreen
       step={2}
       back
+      backTo="/email"
+      onBack={() => setPendingCode(null)}
       footer={
         <Rise i={3} style={{ gap: 10 }}>
           <PrimaryButton label={L("Verify", "Vérifier")} onPress={() => verify()} busy={busy} disabled={code.length !== LENGTH} />

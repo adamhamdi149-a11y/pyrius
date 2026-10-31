@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cleanVoice, TTS_MODEL } from "@/lib/ai/voice";
+import { cleanVoice, speechInstructions, TTS_MODEL } from "@/lib/ai/voice";
 import { gate } from "@/lib/apiGate";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!key) return NextResponse.json({ error: "Voice isn't set up on this server yet.", code: "not_configured" }, { status: 503 });
   const g = await gate(req, "speak");
   if (g instanceof NextResponse) return g;
-  const body = ((await req.json().catch(() => null)) ?? {}) as { text?: unknown; voice?: unknown };
+  const body = ((await req.json().catch(() => null)) ?? {}) as { text?: unknown; voice?: unknown; language?: unknown };
   const text = typeof body.text === "string" ? body.text.trim().slice(0, 1500) : "";
   if (!text) return NextResponse.json({ error: "Nothing to say.", code: "bad_request" }, { status: 400 });
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
         model: TTS_MODEL(),
         voice: cleanVoice(body.voice),
         input: text,
-        instructions: "A warm, calm and confident travel concierge. Natural pace, friendly, never rushed.",
+        instructions: speechInstructions(body.language),
         response_format: "mp3",
       }),
     });

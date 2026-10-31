@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -9,8 +9,27 @@ import { useStore } from "~/lib/store";
 import { colors } from "~/lib/theme";
 import { IconButton, StepDots } from "./ui";
 
-/** Layout shared by the setup screens: a quiet top row (back, progress), airy content, actions at the bottom. */
-export function OnboardingScreen({ step, back, children, footer, background }: { step?: number; back?: boolean; children: ReactNode; footer: ReactNode; background?: ReactNode }) {
+/**
+ * Layout shared by the setup screens: a quiet top row (back, progress), airy content, actions at the bottom.
+ * `back` shows the back button; when there is no screen to go back to (the app reopened here), it goes to `backTo`.
+ */
+export function OnboardingScreen({
+  step,
+  back,
+  backTo,
+  onBack,
+  children,
+  footer,
+  background,
+}: {
+  step?: number;
+  back?: boolean;
+  backTo?: Href;
+  onBack?: () => void;
+  children: ReactNode;
+  footer: ReactNode;
+  background?: ReactNode;
+}) {
   const insets = useSafeAreaInsets();
   const { L } = useStore();
   const pad = useKeyboardPadding(28);
@@ -19,8 +38,16 @@ export function OnboardingScreen({ step, back, children, footer, background }: {
       {background}
       <View style={s.top}>
         <View style={s.side}>
-          {back && router.canGoBack() ? (
-            <IconButton label={L("Back", "Retour")} onPress={() => router.back()} style={{ marginLeft: -12 }}>
+          {back && (router.canGoBack() || backTo) ? (
+            <IconButton
+              label={L("Back", "Retour")}
+              onPress={() => {
+                onBack?.();
+                if (router.canGoBack()) router.back();
+                else if (backTo) router.replace(backTo);
+              }}
+              style={{ marginLeft: -12 }}
+            >
               <ChevronLeft color={colors.text2} size={24} strokeWidth={1.8} />
             </IconButton>
           ) : null}

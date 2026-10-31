@@ -6,9 +6,10 @@ import { AppState } from "react-native";
 import type { AgentStage, Attachment, ClientAction, TripPreferences } from "@/lib/types";
 import type { AudioLevels } from "~/components/Orb";
 import { toast } from "~/components/Toast";
-import { api, apiRaw, ApiError } from "../api";
+import { api, apiRaw, ApiError, apiUpload } from "../api";
 import { useConversationEngine } from "../conversation";
 import { useStore } from "../store";
+import { detectLang, voiceFor } from "../voices";
 import { liveVoiceAvailable, RealtimeVoice } from "./realtime";
 import { TurnVoice } from "./turns";
 import type { TranscriptLine, VoiceCallbacks, VoiceEngine, VoiceSession, VoiceStatus } from "./types";
@@ -71,10 +72,7 @@ export function useVoice() {
   );
 
   const transcribe = async (uri: string) => {
-    const form = new FormData();
-    form.append("audio", { uri, name: "turn.m4a", type: "audio/m4a" } as unknown as Blob);
-    form.append("language", settings.locale);
-    return (await api<{ text: string }>("/api/voice/transcribe", undefined, { form })).text;
+    return (await apiUpload<{ text: string }>("/api/voice/transcribe", [{ field: "audio", uri, name: "turn.m4a", type: "audio/mp4" }])).text;
   };
 
   const answer = async (text: string) => {
@@ -86,7 +84,9 @@ export function useVoice() {
 
   const speak = async (text: string) => {
     if (!voice.spoken) return null;
-    const res = await apiRaw("/api/voice/speak", { text, voice: voice.voice });
+    // Pyrius answers in the user's language: speak it with the voice chosen for that language.
+    const lang = detectLang(text, settings.locale === "fr" ? "fr" : "en");
+    const res = await apiRaw("/api/voice/speak", { text, voice: voiceFor(voice, lang), language: lang });
     const bytes = new Uint8Array(await res.arrayBuffer());
     // Two files in turn, so the next reply never overwrites the one still playing.
     const file = new File(Paths.cache, `pyrius-reply-${replyFile.current++ % 2}.mp3`);
@@ -123,7 +123,7 @@ export function useVoice() {
     setConversationId(c.id);
     const openSession = () => {
       const conv = store.getConversation(c.id) ?? c;
-      return api<VoiceSession>("/api/voice/session", { ...engine.basePayload(conv), voice: voice.voice, spoken: voice.spoken });
+      return api<VoiceSession>("/api/voice/session", { ...engine.basePayload(conv), voice: voiceFor(voice, settings.locale === "fr" ? "fr" : "en"), spoken: voice.spoken });
     };
     const e: VoiceEngine = mode === "live" ? new RealtimeVoice(proxy, openSession) : new TurnVoice(proxy, { recorder, transcribe, answer, speak });
     current.current = e;
@@ -139,7 +139,7 @@ export function useVoice() {
       setStatus("error");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, voice.voice, voice.spoken, settings.locale]);
+  }, [mode, voice.voice, voice.voiceFr, voice.spoken, settings.locale]);
 
   // Voice ends when the app leaves the screen: no microphone in the background.
   useEffect(() => {

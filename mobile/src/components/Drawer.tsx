@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { BellRing, Bookmark, Plus, Search, X } from "lucide-react-native";
+import { BellRing, Bookmark, Compass, Luggage, Plus, Search, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -70,7 +70,7 @@ export function Drawer({ open, onClose, onNew }: { open: boolean; onClose: () =>
     setActiveId(c.id);
     onClose();
   };
-  const go = (path: "/saved" | "/tracking" | "/settings") => {
+  const go = (path: "/saved" | "/tracking" | "/settings" | "/trips" | "/explore") => {
     onClose();
     router.push(path);
   };
@@ -119,6 +119,17 @@ export function Drawer({ open, onClose, onNew }: { open: boolean; onClose: () =>
           </View>
 
           <View style={{ gap: 2, marginTop: 18 }}>
+            <Pressable accessibilityRole="button" onPress={() => go("/explore")} style={({ pressed }) => [s.item, pressed && s.pressed]}>
+              <Compass color={accent.hi} size={20} strokeWidth={1.7} />
+              <T style={s.itemText}>{L("Explore", "Explorer")}</T>
+              <View style={[s.newTag, { borderColor: accent.line }]}>
+                <T weight="semibold" style={{ fontSize: 10, letterSpacing: 0.4, color: accent.hi }}>{L("NEW", "NOUVEAU")}</T>
+              </View>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => go("/trips")} style={({ pressed }) => [s.item, pressed && s.pressed]}>
+              <Luggage color={colors.text2} size={20} strokeWidth={1.7} />
+              <T style={s.itemText}>{L("My trips", "Mes voyages")}</T>
+            </Pressable>
             <Pressable accessibilityRole="button" onPress={() => go("/saved")} style={({ pressed }) => [s.item, pressed && s.pressed]}>
               <Bookmark color={colors.text2} size={20} strokeWidth={1.7} />
               <T style={s.itemText}>{L("Saved offers", "Offres enregistrées")}</T>
@@ -173,6 +184,7 @@ const s = StyleSheet.create({
   searchInput: { ...noOutline, flex: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 15, height: "100%" },
   item: { flexDirection: "row", alignItems: "center", gap: 14, height: 50, paddingHorizontal: 12, borderRadius: radii.md },
   itemText: { fontSize: 16 },
+  newTag: { marginLeft: "auto", height: 20, paddingHorizontal: 7, borderRadius: 6, borderWidth: 1, justifyContent: "center" },
   pressed: { backgroundColor: colors.surface },
   rule: { height: 1, backgroundColor: colors.borderSoft, marginVertical: 14, marginHorizontal: 12 },
   section: { fontSize: 14, color: colors.text3, paddingHorizontal: 12, marginBottom: 6 },

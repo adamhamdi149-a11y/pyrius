@@ -1,6 +1,4 @@
 import { getRecordingPermissionsAsync } from "expo-audio";
-import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
 import { ChevronRight, LogOut } from "lucide-react-native";
 import { useEffect, useState, type ReactNode } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Switch, TextInput, View } from "react-native";
@@ -12,6 +10,7 @@ import { Divider, Page, Section } from "~/components/Page";
 import { ThemePicker } from "~/components/ThemePicker";
 import { VoiceOptions } from "~/components/VoiceOptions";
 import { T, tap, useAccent } from "~/components/ui";
+import { getNotificationPermission, requestNotificationPermission } from "~/lib/notifications";
 import { useStore } from "~/lib/store";
 import { colors, fonts, radii, noOutline } from "~/lib/theme";
 
@@ -63,7 +62,7 @@ export default function Settings() {
   useEffect(() => {
     const read = () => {
       getRecordingPermissionsAsync().then((p) => setMic(p.status as typeof mic), () => {});
-      Notifications.getPermissionsAsync().then((p) => setAlerts(p.status as typeof alerts), () => {});
+      getNotificationPermission().then(setAlerts, () => {});
     };
     read();
     const sub = AppState.addEventListener("change", (st) => st === "active" && read());
@@ -153,7 +152,7 @@ export default function Settings() {
             alerts === "denied"
               ? () => Linking.openSettings()
               : alerts === "undetermined"
-                ? () => Notifications.requestPermissionsAsync().then((p) => setAlerts(p.status as typeof alerts), () => {})
+                ? () => requestNotificationPermission(L("Price alerts", "Alertes de prix")).then(setAlerts, () => {})
                 : undefined
           }
         />
@@ -162,10 +161,8 @@ export default function Settings() {
       <Section title={L("Account", "Compte")}>
         <Pressable
           accessibilityRole="button"
-          onPress={async () => {
-            await signOut();
-            router.replace("/welcome");
-          }}
+          // Signed out: the layout's guards close the app screens and open the welcome screen.
+          onPress={() => signOut()}
           style={({ pressed }) => [s.row, pressed && { backgroundColor: colors.surface }]}
         >
           <LogOut color={colors.error} size={18} />

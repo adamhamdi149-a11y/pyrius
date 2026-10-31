@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { View } from "react-native";
 import { OnboardingScreen } from "~/components/Onboarding";
 import { Orb } from "~/components/Orb";
@@ -11,15 +10,13 @@ export default function Light() {
   return (
     <OnboardingScreen
       step={5}
+      back
       footer={
         <Rise i={2}>
           <PrimaryButton
             label={L("Continue", "Continuer")}
-            onPress={() => {
-              setOnboarded(true);
-              if (router.canDismiss()) router.dismissAll();
-              router.replace("/chat");
-            }}
+            // Setup is done: the layout's guards close the setup screens and open the chat.
+            onPress={() => setOnboarded(true)}
           />
         </Rise>
       }

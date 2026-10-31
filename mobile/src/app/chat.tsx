@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SquarePen } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Keyboard, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Chip as ChipT, ChipAction } from "@/lib/types";
 import { Composer, type ComposerHandle } from "~/components/chat/Composer";
 import { AssistantMessage, ErrorRow, Thinking, UserMessage } from "~/components/chat/Messages";
-import { PlusSheet, PrefsSheet } from "~/components/chat/Sheets";
+import { PrefsSheet } from "~/components/chat/Sheets";
+import type { PendingUpload } from "~/lib/uploads";
 import { Drawer } from "~/components/Drawer";
 import { Glow } from "~/components/Glow";
 import { Orb, type MobileOrbMood } from "~/components/Orb";
@@ -34,7 +35,7 @@ function MenuGlyph() {
 
 export default function Chat() {
   const store = useStore();
-  const { L, settings, activeId, conversations } = store;
+  const { L, settings, activeId, conversations, signOut } = store;
   const engine = useConversationEngine();
   const insets = useSafeAreaInsets();
   const pad = useKeyboardPadding(8);
@@ -44,12 +45,11 @@ export default function Chat() {
   const ys = useRef<Record<string, number>>({});
 
   const [menu, setMenu] = useState(false);
-  const [plus, setPlus] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<{ convId: string; text: string; action?: ChipAction; message?: string } | null>(null);
+  const [error, setError] = useState<{ convId: string; text: string; action?: ChipAction; files?: PendingUpload[]; message?: string } | null>(null);
   const [flash, setFlash] = useState<"success" | "error" | null>(null);
   const [pulseKey, setPulseKey] = useState(0);
   const [draftPrefs, setDraftPrefs] = useState<QuickPrefs>({
@@ -84,33 +84,34 @@ export default function Chat() {
   };
 
   const ask = useCallback(
-    async (id: string, text: string, action?: ChipAction) => {
+    async (id: string, text: string, action?: ChipAction, files?: PendingUpload[]) => {
       setPending(true);
       setError(null);
       try {
-        await engine.ask(id, text, action);
+        await engine.ask(id, text, action, files);
         setPulseKey((k) => k + 1);
         flashFor("success");
       } catch (e) {
         flashFor("error");
         // A signed-out or expired session: the message stays in the conversation; sign in again to continue.
-        if (e instanceof ApiError && e.status === 401) router.replace("/welcome");
-        setError({ convId: id, text, action, message: e instanceof ApiError ? e.message : undefined });
+        if (e instanceof ApiError && e.status === 401) signOut();
+        setError({ convId: id, text, action, files, message: e instanceof ApiError ? e.message : undefined });
       } finally {
         setPending(false);
       }
     },
-    [engine],
+    [engine, signOut],
   );
 
-  const send = (text: string, action?: ChipAction) => {
+  const send = (text: string, action?: ChipAction, files?: PendingUpload[]) => {
     if (pending) return;
     Keyboard.dismiss();
     const c = engine.ensureConversation(draftPrefs);
-    engine.append(c.id, { role: "user", text });
+    const uploads = files?.length ? files.map((f) => ({ name: f.name, kind: f.kind, uri: f.uri })) : undefined;
+    engine.append(c.id, { role: "user", text, uploads });
     stick.current = true;
     setDrafting(false);
-    ask(c.id, text, action);
+    ask(c.id, text, action, files);
   };
 
   const onChip = (chip: ChipT) => {
@@ -129,6 +130,26 @@ export default function Chat() {
     setError(null);
     setDrafting(false);
   };
+
+  // A request handed over from Explore or My Trips (lib/handoff): start a new conversation with it.
+  const params = useLocalSearchParams<{ ask?: string; k?: string }>();
+  const handoff = useRef<{ k: string; text: string } | null>(null);
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!params.ask || !params.k || handled.current === params.k) return;
+    handled.current = params.k;
+    handoff.current = { k: params.k, text: params.ask };
+    store.setActiveId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.k]);
+  useEffect(() => {
+    // Sent once the new, empty conversation is the active one.
+    if (!handoff.current || activeId !== null || pending) return;
+    const text = handoff.current.text;
+    handoff.current = null;
+    send(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, params.k, pending]);
 
   // Typing on the welcome screen clears everything but the orb, which starts listening (as on the web).
   const focusMode = empty && (drafting || focused);
@@ -199,7 +220,7 @@ export default function Chat() {
                 text={L("Pyrius couldn't answer that", "Pyrius n'a pas pu répondre")}
                 hint={error.message ?? L("Nothing was lost. Try again when you're ready.", "Rien n'est perdu. Réessayez quand vous voulez.")}
                 retryLabel={L("Try again", "Réessayer")}
-                onRetry={() => ask(error.convId, error.text, error.action)}
+                onRetry={() => ask(error.convId, error.text, error.action, error.files)}
               />
             ) : null}
           </ScrollView>
@@ -215,9 +236,8 @@ export default function Chat() {
           ) : null}
           <Composer
             ref={composer}
-            onSend={(v) => send(v)}
+            onSend={(v, files) => send(v, undefined, files)}
             onVoice={() => router.push("/voice")}
-            onPlus={() => setPlus(true)}
             onPrefs={() => setPrefsOpen(true)}
             prefs={quickPrefs}
             busy={pending}
@@ -229,7 +249,6 @@ export default function Chat() {
       </Animated.View>
 
       <PrefsSheet open={prefsOpen} onClose={() => setPrefsOpen(false)} prefs={quickPrefs} onChange={onPrefsChange} />
-      <PlusSheet open={plus} onClose={() => setPlus(false)} hasTrip={Boolean(conv?.prefs.destinationCode)} onPrompt={(t, now) => (now ? send(t) : composer.current?.setText(t))} />
       <Drawer open={menu} onClose={() => setMenu(false)} onNew={newChat} />
     </View>
   );
