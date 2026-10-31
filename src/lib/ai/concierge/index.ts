@@ -6,6 +6,7 @@ import { flightMode, getProviders } from "@/lib/providers";
 import type { AgentReply, AgentStage, Attachment, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
 import { contextMessage, INSTRUCTIONS, REPLY_FORMAT } from "./prompt";
 import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
+import { userContent, type CleanUpload } from "./uploads";
 
 /**
  * The AI concierge. OpenAI reads the conversation and decides what to do; every action
@@ -15,6 +16,8 @@ import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
 
 export interface ConciergeRequest {
   message: string;
+  /** Photos and files sent with this message, checked by cleanUploads. */
+  uploads?: CleanUpload[];
   history: { role: "user" | "assistant"; content: string }[];
   trip: TripPreferences;
   stage: AgentStage;
@@ -207,7 +210,7 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
   const input: unknown[] = [
     { role: "developer", content: context },
     ...req.history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: req.message },
+    { role: "user", content: userContent(req.message, req.uploads ?? []) },
   ];
 
   let final: ReturnType<typeof finalText> = null;

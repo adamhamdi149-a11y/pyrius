@@ -3,6 +3,7 @@ import { runAgent } from "@/lib/ai/agent";
 import { ConciergeError, runConcierge, type ConciergeRequest } from "@/lib/ai/concierge";
 import { cleanCounts, cleanHistory, cleanLocale, cleanPlan, cleanResults, cleanSaved, cleanToday, cleanTrip, code, oneOf, STAGES } from "@/lib/ai/concierge/clean";
 import { allow } from "@/lib/ai/concierge/rateLimit";
+import { cleanUploads, UploadProblem, type CleanUpload } from "@/lib/ai/concierge/uploads";
 import type { SavedSummary } from "@/lib/ai/concierge/tools";
 import { getUserFromRequest } from "@/lib/supabase/server";
 import type { ChipAction, Locale, PlanId, TripPreferences, AgentStage } from "@/lib/types";
@@ -23,6 +24,8 @@ interface Body {
   saved?: SavedSummary[];
   plan?: PlanId;
   counts?: { saved?: number; trackers?: number };
+  /** Photos and files sent with the message (mobile app): { name, type, data (base64) }. */
+  uploads?: unknown;
 }
 
 /** Quick-reply buttons with a structured action become a plain request for the AI. */
@@ -58,8 +61,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   const locale: Locale = cleanLocale(body.locale);
+  let uploads: CleanUpload[];
+  try {
+    uploads = cleanUploads(body.uploads);
+  } catch (e) {
+    if (e instanceof UploadProblem) return NextResponse.json({ error: e.message, code: "bad_upload" }, { status: 400 });
+    throw e;
+  }
   const typed = typeof body.message === "string" ? body.message.trim() : "";
-  const message = (body.action ? actionText(body.action, locale) : "") || typed;
+  // Files sent without a message still need a turn for the AI to answer.
+  const filesOnly = uploads.length ? (locale === "fr" ? "Voici ce que je vous envoie." : "Here's what I'm sending you.") : "";
+  const message = (body.action ? actionText(body.action, locale) : "") || typed || filesOnly;
   if (!message || message.length > 2000) return NextResponse.json({ error: "Message must be 1–2000 characters" }, { status: 400 });
 
   const prefs = cleanTrip(body.prefs);
@@ -89,6 +101,7 @@ export async function POST(req: Request) {
   try {
     const reply = await runConcierge({
       message,
+      uploads,
       history,
       trip: prefs,
       stage,

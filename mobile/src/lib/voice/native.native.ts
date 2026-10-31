@@ -1,14 +1,27 @@
+import { NativeModules, TurboModuleRegistry } from "react-native";
+
 /**
  * Native pieces for live voice. They exist only in a Pyrius build (development or store build),
- * not in Expo Go, so each is loaded lazily and reported as missing instead of crashing.
+ * not in Expo Go. Requiring react-native-webrtc where its native module is missing throws while the
+ * module loads (a red error screen in development even inside try/catch), so the native module is
+ * looked up first and the package is only required when it's there.
  */
 
 type WebRTC = typeof import("react-native-webrtc");
+
+const hasNative = (name: string) => {
+  try {
+    return Boolean(NativeModules[name] ?? TurboModuleRegistry.get(name));
+  } catch {
+    return false;
+  }
+};
 
 let cached: WebRTC | null | undefined;
 
 export function loadWebRTC(): Pick<WebRTC, "RTCPeerConnection" | "mediaDevices"> | null {
   if (cached !== undefined) return cached;
+  if (!hasNative("WebRTCModule")) return (cached = null);
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m = require("react-native-webrtc") as WebRTC;
@@ -23,6 +36,7 @@ type InCall = { start(o: { media: "audio" }): void; stop(): void; setForceSpeake
 
 /** Routes the call audio to the loudspeaker (WebRTC defaults to the earpiece on phones). */
 export function speaker(on: boolean) {
+  if (!hasNative("InCallManager")) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m = require("react-native-incall-manager");

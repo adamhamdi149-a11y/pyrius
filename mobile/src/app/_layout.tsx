@@ -14,6 +14,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LaunchOverlay } from "~/components/LaunchOverlay";
 import { ToastHost } from "~/components/Toast";
 import { StoreProvider, useStore } from "~/lib/store";
+import { TripsProvider } from "~/lib/trips";
 import { colors } from "~/lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -58,6 +59,12 @@ function Screens() {
           <Stack.Screen name="settings" />
           <Stack.Screen name="saved" />
           <Stack.Screen name="tracking" />
+          <Stack.Screen name="trips/index" />
+          <Stack.Screen name="trips/[id]" />
+          <Stack.Screen name="explore/index" options={{ animation: "fade" }} />
+          <Stack.Screen name="explore/play" options={{ animation: "fade", gestureEnabled: false }} />
+          <Stack.Screen name="explore/results" options={{ animation: "fade" }} />
+          <Stack.Screen name="explore/[id]" />
         </Stack.Protected>
       </Stack>
       <LaunchOverlay />
@@ -75,7 +82,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StoreProvider>
           <StatusBar style="light" />
-          <Screens />
+          <TripsProvider>
+            <Screens />
+          </TripsProvider>
           <ToastHost />
         </StoreProvider>
       </SafeAreaProvider>

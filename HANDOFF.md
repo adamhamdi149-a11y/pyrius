@@ -22,6 +22,12 @@ Context for a new Claude session. **No secrets are in this file or in Git.** Ask
 - Done by the owner: redirect URLs (`exp://**`, `pyrius://**`), Resend SMTP.
 - Last instruction given: add `{{ .Token }}` to the **Confirm signup** and **Magic Link** templates (Authentication → Emails → Templates) and keep the Email OTP length at 6. Not yet confirmed by the owner.
 
+## Session of Oct 31 (mobile)
+- Fixed: Expo Go crash from expo-notifications (now loaded lazily, `mobile/src/lib/notifications.ts`), WebRTC crash in Expo Go (native module checked before require), take-turns voice starting the recorder twice ("The microphone couldn't start"), dictation uploads ("Can't reach Pyrius": uploads now go as bytes through `expo/fetch`, `mobile/src/lib/api.ts`).
+- Navigation rebuilt around phases with `Stack.Protected` (`mobile/src/lib/flow.ts`).
+- Added: voice picker (English and French voice), chat attachments (camera, photos, files to the AI), My Trips, Explore. See `mobile/README.md`.
+- Owner to do: run `supabase/migrations/0002_trips.sql` in the Pyrius SQL editor.
+
 ## Open items
 1. Confirm the email code sign-in works end to end on the phone (enter email, get the code, continue to the alerts page).
 2. Check the Vercel production deploy and env vars (`OPENAI_API_KEY`, `SERPAPI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). Vercel MCP needs a fresh authorization link (`authorize_team_access`), valid about 10 minutes.

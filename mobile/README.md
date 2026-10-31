@@ -125,6 +125,27 @@ Device tests still to do on a real phone: the email code, microphone permission 
 a live voice session (talk, interrupt, mute, type in voice, end), a flight search by voice, the
 Book button, and the take-turns mode in Expo Go.
 
+## Explore, My Trips and attachments
+
+- **Explore** (`src/app/explore/`): a discovery game of 12 visual questions. The engine is shared code in
+  `../src/lib/explore/` (traits, questions, a catalog of real destinations, scoring and personalities,
+  with tests): answers become a trait profile, destinations are ranked by how well they match it on the
+  traits the person expressed, and every pick is explained by the traits that matched. Budgets are
+  categories, never prices. "Flights" and "Search flights" open the chat with the request already sent
+  (`src/lib/handoff.ts`). Answers, past discoveries and saved places live in the user's settings.
+- **My Trips** (`src/app/trips/`): trips with Flights, Hotels and Rental cars. Shared model and logic in
+  `../src/lib/trips/` (`placeReservation` files a confirmed booking under its trip; `providers/duffel.ts`
+  turns a Duffel order into a reservation). Reservations are written only by the server when a provider
+  confirms a booking (Duffel for flights, Booking.com for hotels and cars, not connected yet), so the
+  app never shows a booking that doesn't exist. Run `supabase/migrations/0002_trips.sql` in the Supabase
+  SQL editor to keep trips in the account; until then planned trips stay on the phone.
+- **Photos** of places come from Wikimedia Commons (`src/lib/photos.ts`), looked up once and cached.
+- **Attachments**: the chat bar's + adds photos (camera or library) and files (PDF, text). Photos are
+  resized on the phone; files go to the AI with that message only (`../src/lib/ai/concierge/uploads.ts`)
+  and aren't stored by Pyrius.
+- **Voices**: pick one voice for English and one for French in Settings or the voice screen, with a
+  preview of each. The server's allowlist is in `../src/lib/ai/voice/index.ts`.
+
 ## Not included yet
 
 - Purchases: the Plus and Pro plans aren't sold in the app. Digital subscriptions in the App Store

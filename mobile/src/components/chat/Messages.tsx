@@ -1,5 +1,6 @@
 import * as WebBrowser from "expo-web-browser";
-import { AudioLines, RotateCcw } from "lucide-react-native";
+import { Image } from "expo-image";
+import { AudioLines, FileText, RotateCcw } from "lucide-react-native";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
@@ -9,13 +10,34 @@ import { colors, radii } from "~/lib/theme";
 import { Chip, T } from "../ui";
 import { AttachmentView } from "./Results";
 
+/** Photos as thumbnails, other files as a named chip. */
+export function UploadList({ uploads, align = "flex-end" }: { uploads: NonNullable<ChatMessage["uploads"]>; align?: "flex-end" | "flex-start" }) {
+  return (
+    <View style={[s.uploads, { justifyContent: align }]}>
+      {uploads.map((u, i) =>
+        u.kind === "image" && u.uri ? (
+          <Image key={i} source={{ uri: u.uri }} style={s.thumb} contentFit="cover" transition={150} accessibilityLabel={u.name} />
+        ) : (
+          <View key={i} style={s.fileChip}>
+            <FileText color={colors.text2} size={16} />
+            <T numberOfLines={1} style={{ fontSize: 13, color: colors.text2, maxWidth: 150 }}>{u.name}</T>
+          </View>
+        ),
+      )}
+    </View>
+  );
+}
+
 export function UserMessage({ m }: { m: ChatMessage }) {
   return (
-    <Animated.View entering={FadeInDown.springify().damping(22)} style={s.userWrap}>
-      <View style={s.user}>
-        {m.via === "voice" ? <AudioLines color={colors.text3} size={13} style={{ marginBottom: 4 }} /> : null}
-        <T style={s.userText} selectable>{m.text}</T>
-      </View>
+    <Animated.View entering={FadeInDown.springify().damping(22)} style={[s.userWrap, { gap: 8 }]}>
+      {m.uploads?.length ? <UploadList uploads={m.uploads} /> : null}
+      {m.text ? (
+        <View style={s.user}>
+          {m.via === "voice" ? <AudioLines color={colors.text3} size={13} style={{ marginBottom: 4 }} /> : null}
+          <T style={s.userText} selectable>{m.text}</T>
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -89,6 +111,9 @@ const s = StyleSheet.create({
   userWrap: { alignItems: "flex-end" },
   user: { maxWidth: "84%", backgroundColor: colors.surface2, borderRadius: radii.xl + 2, borderBottomRightRadius: 8, paddingHorizontal: 16, paddingVertical: 11 },
   userText: { fontSize: 16, lineHeight: 23 },
+  uploads: { flexDirection: "row", flexWrap: "wrap", gap: 8, maxWidth: "84%" },
+  thumb: { width: 120, height: 120, borderRadius: radii.lg, backgroundColor: colors.surface },
+  fileChip: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingHorizontal: 14, borderRadius: radii.lg, backgroundColor: colors.surface2 },
   aiText: { fontSize: 16, lineHeight: 25, color: colors.text },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   thinking: { flexDirection: "row", alignItems: "center", gap: 5, height: 28 },

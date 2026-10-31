@@ -13,11 +13,22 @@ export const REALTIME_MODEL = () => process.env.OPENAI_REALTIME_MODEL || "gpt-re
 export const TRANSCRIBE_MODEL = () => process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
 export const TTS_MODEL = () => process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
 
-/** Voices offered in the app. The server only accepts these. */
-export const VOICES = ["marin", "cedar", "coral", "sage", "verse", "ash"] as const;
+/**
+ * Voices offered in the apps. The server only accepts these. Each one works for both live voice
+ * (Realtime) and spoken replies (text to speech), and each speaks English and French.
+ */
+export const VOICES = ["marin", "cedar", "coral", "sage", "verse", "ash", "ballad", "alloy", "echo", "shimmer"] as const;
 export type VoiceId = (typeof VOICES)[number];
 export const DEFAULT_VOICE: VoiceId = "marin";
 export const cleanVoice = (v: unknown): VoiceId => ((VOICES as readonly string[]).includes(v as string) ? (v as VoiceId) : DEFAULT_VOICE);
+
+/** How a spoken reply should sound, in the language it's written in. */
+export function speechInstructions(language: unknown) {
+  const base = "A warm, calm and confident travel concierge. Natural pace, friendly, never rushed.";
+  if (language === "fr") return `${base} Speak French like a native speaker, with natural French pronunciation and rhythm.`;
+  if (language === "en") return `${base} Speak English like a native speaker.`;
+  return base;
+}
 
 /** Longest voice session the app keeps open, in seconds (cost ceiling per session). */
 export const MAX_SESSION_SECONDS = () => Math.min(3600, Math.max(60, Number(process.env.VOICE_MAX_SESSION_SECONDS) || 900));
