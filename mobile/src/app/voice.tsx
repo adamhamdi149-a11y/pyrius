@@ -219,7 +219,7 @@ export default function VoiceScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#060709" },
+  root: { flex: 1, backgroundColor: colors.bg },
   top: { height: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18 },
   topBtn: { width: 46, height: 46, backgroundColor: colors.surface, borderRadius: 23 },
   modePill: { height: 28, paddingHorizontal: 12, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.borderSoft, justifyContent: "center" },

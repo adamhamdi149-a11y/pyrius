@@ -104,7 +104,7 @@ const s = StyleSheet.create({
   notice: { width: 300, flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: radii.xl + 2, backgroundColor: "rgba(28,29,36,0.9)", borderWidth: 1, borderColor: colors.border },
   noticeIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.sidebar, alignItems: "center", justifyContent: "center" },
   dotOrb: { width: 18, height: 18, borderRadius: 9 },
-  fare: { width: 268, padding: 22, gap: 22, borderRadius: radii.xxl, backgroundColor: "#121318", borderWidth: 1, borderColor: colors.borderSoft },
+  fare: { width: 268, padding: 22, gap: 22, borderRadius: radii.xxl, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft },
   route: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   line: { flex: 1, height: 1, marginHorizontal: 12, opacity: 0.7 },
   drop: { height: 28, paddingHorizontal: 10, borderRadius: radii.pill, backgroundColor: colors.successSoft, flexDirection: "row", alignItems: "center", gap: 4 },

@@ -17,7 +17,7 @@ import { OverlayHost } from "~/components/Overlay";
 import { ToastHost } from "~/components/Toast";
 import { StoreProvider, useStore } from "~/lib/store";
 import { TripsProvider } from "~/lib/trips";
-import { colors } from "~/lib/theme";
+import { colors, scheme } from "~/lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
@@ -83,7 +83,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
         <StoreProvider>
-          <StatusBar style="light" />
+          <StatusBar style={scheme === "light" ? "dark" : "light"} />
           <TripsProvider>
             <Screens />
             <OverlayHost />

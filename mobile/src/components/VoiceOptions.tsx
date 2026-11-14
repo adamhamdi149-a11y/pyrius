@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { File, Paths } from "expo-file-system";
 import { Check, Pause, Play } from "lucide-react-native";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { toast } from "~/components/Toast";
 import { apiRaw, ApiError } from "~/lib/api";
@@ -41,7 +41,8 @@ export function VoiceOptions({ note }: { note?: string }) {
   const { L, voice, updateVoice, settings } = useStore();
   const accent = useAccent();
   const { width } = useWindowDimensions();
-  const card = width - 40;
+  // Each card is exactly as wide as the space the picker sits in, so a card is always centred.
+  const [card, setCard] = useState(width - 40);
   const [lang, setLang] = useState<VoiceLang>(settings.locale === "fr" ? "fr" : "en");
   const chosen = voiceFor(voice, lang);
   const [page, setPage] = useState(() => Math.max(0, VOICE_LIST.findIndex((v) => v.id === chosen)));
@@ -100,8 +101,16 @@ export function VoiceOptions({ note }: { note?: string }) {
     }
   };
 
+  const onLayout = (e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w && w !== card) {
+      setCard(w);
+      requestAnimationFrame(() => scroller.current?.scrollTo({ x: page * w, animated: false }));
+    }
+  };
+
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: 14 }} onLayout={onLayout}>
       <View style={s.segment} accessibilityRole="tablist">
         {(["en", "fr"] as const).map((l) => (
           <Pressable
@@ -126,15 +135,13 @@ export function VoiceOptions({ note }: { note?: string }) {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
         contentOffset={{ x: page * card, y: 0 }}
-        style={{ marginHorizontal: -20 }}
-        contentContainerStyle={{ paddingHorizontal: 20 }}
         snapToInterval={card}
         decelerationRate="fast"
       >
         {VOICE_LIST.map((v) => {
           const on = chosen === v.id;
           return (
-            <View key={v.id} style={{ width: card, paddingHorizontal: 4 }}>
+            <View key={v.id} style={{ width: card }}>
               <View style={[s.card, on && { borderColor: accent.line }]}>
                 <Pressable onPress={() => preview(v.id)} accessibilityRole="button" accessibilityLabel={L(`Hear ${v.name}`, `Écouter ${v.name}`)} style={s.orbWrap}>
                   <Halo on={playing === v.id} color={accent.hi} />

@@ -17,7 +17,7 @@ const MISS = "public, max-age=3600, s-maxage=86400";
 /**
  * A photo of a place, served or redirected by Pyrius and cached at the edge: GET /api/photo?title=Maldives&w=960
  * (&code=LIS to use an airport's city, &o=portrait for tall cards, &meta=1 for the credit as JSON).
- * Order: the website's hand-picked photos, then Unsplash, Pixabay or Pexels (whichever has a key),
+ * Order: Pixabay, then the website's hand-picked photos, Unsplash or Pexels (whichever has a key),
  * then the place's Wikipedia photo (never a flag or a map).
  */
 export async function GET(req: Request) {
@@ -35,29 +35,31 @@ export async function GET(req: Request) {
   const orientation = q.get("o") === "portrait" ? "portrait" : "landscape";
   let img: Awaited<ReturnType<typeof photoBytes>> = null;
   let credit = "Wikimedia Commons";
+  const meta = q.get("meta") === "1";
+  const redirect = (url: string, by: string) =>
+    meta ? NextResponse.json({ credit: by }, { headers: { "Cache-Control": HIT } }) : new Response(null, { status: 302, headers: { Location: url, "Cache-Control": HIT } });
   try {
-    // The website's own hand-picked photo for this place, when it has one.
-    const code = q.get("code")?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null;
-    const picked = curatedPhoto(title, code, width);
-    if (picked) {
-      if (q.get("meta") === "1") return NextResponse.json({ credit: "Unsplash" }, { headers: { "Cache-Control": HIT } });
-      return new Response(null, { status: 302, headers: { Location: picked, "Cache-Control": HIT } });
-    }
-    // Unsplash (with a key): its images load from its own CDN, as its guidelines ask.
-    const best = await unsplashPhoto(title, width, orientation).catch((e) => (console.error("unsplash", (e as Error).message), null));
-    if (best) {
-      if (q.get("meta") === "1") return NextResponse.json({ credit: best.credit }, { headers: { "Cache-Control": HIT } });
-      return new Response(null, { status: 302, headers: { Location: best.url, "Cache-Control": HIT } });
-    }
-    // Then Pixabay, Pexels, and finally Wikipedia's own photo.
-    const pro =
-      (await pixabayPhoto(title, width, orientation).catch((e) => (console.error("pixabay", (e as Error).message), null))) ??
-      (await pexelsPhoto(title, width, orientation).catch((e) => (console.error("pexels", (e as Error).message), null)));
-    if (pro) {
-      img = await photoBytes(pro.url);
-      credit = pro.credit;
+    // Pixabay first: high-resolution travel photography for every destination.
+    const pix = await pixabayPhoto(title, width, orientation).catch((e) => (console.error("pixabay", (e as Error).message), null));
+    if (pix) {
+      img = await photoBytes(pix.url).catch(() => null);
+      credit = pix.credit;
     }
     if (!img) {
+      // The website's hand-picked photos, then Unsplash or Pexels when they have a key.
+      const code = q.get("code")?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null;
+      const picked = curatedPhoto(title, code, width);
+      if (picked) return redirect(picked, "Unsplash");
+      const best = await unsplashPhoto(title, width, orientation).catch((e) => (console.error("unsplash", (e as Error).message), null));
+      if (best) return redirect(best.url, best.credit);
+      const pex = await pexelsPhoto(title, width, orientation).catch((e) => (console.error("pexels", (e as Error).message), null));
+      if (pex) {
+        img = await photoBytes(pex.url);
+        credit = pex.credit;
+      }
+    }
+    if (!img) {
+      // Last resort: the place's own Wikipedia photo (never a flag or a map).
       const url = await photoUrl(title, width);
       img = url ? await photoBytes(url) : null;
       credit = "Wikimedia Commons";
@@ -68,6 +70,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Photo unavailable right now." }, { status: 502, headers: { "Cache-Control": "no-store" } });
   }
   if (!img) return NextResponse.json({ error: "No photo for this place." }, { status: 404, headers: { "Cache-Control": MISS } });
-  if (q.get("meta") === "1") return NextResponse.json({ credit }, { headers: { "Cache-Control": HIT } });
+  if (meta) return NextResponse.json({ credit }, { headers: { "Cache-Control": HIT } });
   return new Response(img.body, { headers: { "Content-Type": img.type, "Cache-Control": HIT, "X-Photo-Credit": encodeURIComponent(credit) } });
 }

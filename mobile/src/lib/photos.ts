@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { API_URL } from "./config";
 
 /**
- * Real photos of places through Pyrius's own server (/api/photo): the website's hand-picked
- * photos, then travel photography (Pixabay), then the place's Wikipedia photo. Cached at the edge,
- * then on the phone's disk.
+ * Real photos of places through Pyrius's own server (/api/photo): Pixabay travel photography, then
+ * the website's hand-picked photos, then the place's Wikipedia photo. Cached at the edge, then on
+ * the phone's disk.
  */
 
 export type PhotoSize = "small" | "medium" | "large";
@@ -13,7 +13,7 @@ const WIDTH: Record<PhotoSize, number> = { small: 500, medium: 960, large: 1280 
 
 /** The address of a place's photo. It answers 404 when the place has no photo. */
 export const photoUri = (title: string, size: PhotoSize = "medium", portrait = false, code?: string) =>
-  `${API_URL}/api/photo?title=${encodeURIComponent(title)}&w=${WIDTH[size]}${portrait ? "&o=portrait" : ""}${code ? `&code=${code}` : ""}&v=3`;
+  `${API_URL}/api/photo?title=${encodeURIComponent(title)}&w=${WIDTH[size]}${portrait ? "&o=portrait" : ""}${code ? `&code=${code}` : ""}&v=4`;
 
 const credits = new Map<string, string>();
 
