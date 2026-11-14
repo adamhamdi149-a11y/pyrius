@@ -18,6 +18,11 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
   const title = cleanTitle(q.get("title"));
   if (!title) return NextResponse.json({ error: "Unknown place." }, { status: 400 });
+  if (q.get("debug") === "1" && process.env.VERCEL_ENV !== "production") {
+    const ua = "PyriusBot/1.0 (https://pyrius.app; photos of travel destinations)";
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageprops|pageimages&ppprop=wikibase_item|disambiguation&piprop=thumbnail&pithumbsize=500&titles=${encodeURIComponent(title)}`, { headers: { "User-Agent": ua, "Api-User-Agent": ua } });
+    return NextResponse.json({ status: r.status, body: (await r.text()).slice(0, 1500) }, { headers: { "Cache-Control": "no-store" } });
+  }
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   const ok = allow(`photo:${ip}`, Date.now(), [
     { ms: 60_000, max: 240 },
