@@ -25,9 +25,16 @@ export async function GET(req: Request) {
   ]);
   if (!ok.ok) return NextResponse.json({ error: "Too many requests." }, { status: 429, headers: { "Retry-After": String(ok.retryAfter) } });
 
-  const url = await photoUrl(title, cleanWidth(q.get("w"))).catch(() => null);
-  if (!url) console.error("no photo found for", title);
-  const img = url ? await photoBytes(url) : null;
+  let img: Awaited<ReturnType<typeof photoBytes>> = null;
+  try {
+    const url = await photoUrl(title, cleanWidth(q.get("w")));
+    img = url ? await photoBytes(url) : null;
+  } catch (e) {
+    // Wikimedia didn't answer: try again next time instead of remembering "no photo".
+    console.error("photo unavailable", title, (e as Error).message);
+    return NextResponse.json({ error: "Photo unavailable right now.", step: (e as Error).message.slice(0, 120) }, { status: 502, headers: { "Cache-Control": "no-store" } });
+  }
+  if (!img) console.error("no photo for", title);
   if (!img) return NextResponse.json({ error: "No photo for this place." }, { status: 404, headers: { "Cache-Control": MISS } });
   return new Response(img.body, { headers: { "Content-Type": img.type, "Cache-Control": HIT, "X-Photo-Source": "Wikimedia Commons" } });
 }

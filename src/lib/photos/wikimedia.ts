@@ -25,33 +25,37 @@ export const cleanTitle = (v: unknown) => {
   return t.length >= 1 && t.length <= 120 && /^[\p{L}\p{M}\p{N} .,'’()&-]+$/u.test(t) ? t : null;
 };
 
-async function json<T>(url: string): Promise<T | null> {
+/** Wikimedia didn't answer: unlike "no photo", this isn't remembered. */
+export class PhotoUnavailable extends Error {}
+
+async function json<T>(url: string): Promise<T> {
+  const host = new URL(url).hostname;
   const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(6000) }).catch((e: Error) => {
-    console.error("photo lookup failed", new URL(url).hostname, e.message);
-    return null;
+    throw new PhotoUnavailable(`${host}: ${e.message}`);
   });
-  if (r && !r.ok) console.error("photo lookup refused", new URL(url).hostname, r.status);
-  if (!r?.ok) return null;
-  return (await r.json().catch(() => null)) as T | null;
+  if (!r.ok) throw new PhotoUnavailable(`${host}: ${r.status}`);
+  const j = await r.json().catch(() => null);
+  if (!j) throw new PhotoUnavailable(`${host}: unreadable answer`);
+  return j as T;
 }
 
 type Pages = { query?: { pages?: { missing?: boolean; pageprops?: { wikibase_item?: string; disambiguation?: string }; thumbnail?: { source?: string } }[] } };
 type Claims = { claims?: { P18?: { mainsnak?: { datavalue?: { value?: string } } }[] } };
 type FileInfo = { query?: { pages?: { imageinfo?: { thumburl?: string; url?: string; mime?: string }[] }[] } };
 
-/** The image address for a place at about `width` pixels wide, or null when the article has no photo. */
+/** The image address for a place at about `width` pixels wide, or null when the article has no photo. Throws PhotoUnavailable. */
 export async function photoUrl(title: string, width: PhotoWidth): Promise<string | null> {
-  const page = await json<Pages>(
+  const page: Pages = await json<Pages>(
     `https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageprops|pageimages&ppprop=wikibase_item|disambiguation&piprop=thumbnail&pithumbsize=${width}&titles=${encodeURIComponent(title)}`,
   );
   const p = page?.query?.pages?.[0];
   if (!p || p.missing || p.pageprops?.disambiguation !== undefined) return null;
   const qid = p.pageprops?.wikibase_item;
   if (qid && /^Q\d+$/.test(qid)) {
-    const claims = await json<Claims>(`https://www.wikidata.org/w/api.php?action=wbgetclaims&format=json&property=P18&entity=${qid}`);
+    const claims: Claims = await json<Claims>(`https://www.wikidata.org/w/api.php?action=wbgetclaims&format=json&property=P18&entity=${qid}`);
     const file = claims?.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
     if (file) {
-      const info = await json<FileInfo>(
+      const info: FileInfo = await json<FileInfo>(
         `https://commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo&iiprop=url|mime&iiurlwidth=${width}&titles=${encodeURIComponent(`File:${file}`)}`,
       );
       const ii = info?.query?.pages?.[0]?.imageinfo?.[0];
@@ -63,7 +67,7 @@ export async function photoUrl(title: string, width: PhotoWidth): Promise<string
 
 const MAX_BYTES = 6 * 1024 * 1024;
 
-/** The photo's bytes, or null. Only Wikimedia's own image host is ever fetched. */
+/** The photo's bytes, or null for an address that isn't Wikimedia's image host. Throws PhotoUnavailable. */
 export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type: string } | null> {
   let u: URL;
   try {
@@ -72,12 +76,11 @@ export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type
     return null;
   }
   if (u.protocol !== "https:" || u.hostname !== "upload.wikimedia.org") return null;
-  const r = await fetch(u, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).catch(() => null);
-  const type = r?.headers.get("content-type") ?? "";
-  if (!r?.ok || !/^image\/(jpeg|png|webp)/.test(type)) {
-    console.error("photo download refused", r?.status ?? "network", type);
-    return null;
-  }
-  const body = await r.arrayBuffer().catch(() => null);
-  return body && body.byteLength <= MAX_BYTES ? { body, type } : null;
+  const r = await fetch(u, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).catch((e: Error) => {
+    throw new PhotoUnavailable(`download: ${e.message}`);
+  });
+  const type = r.headers.get("content-type") ?? "";
+  if (!r.ok || !/^image\/(jpeg|png|webp)/.test(type)) throw new PhotoUnavailable(`download: ${r.status} ${type}`);
+  const body = await r.arrayBuffer();
+  return body.byteLength <= MAX_BYTES ? { body, type } : null;
 }
