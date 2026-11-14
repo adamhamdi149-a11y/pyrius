@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { allow } from "@/lib/ai/concierge/rateLimit";
 import { pexelsPhoto } from "@/lib/photos/pexels";
+import { unsplashPhoto } from "@/lib/photos/unsplash";
 import { cleanTitle, cleanWidth, photoBytes, photoUrl } from "@/lib/photos/wikimedia";
 
 export const runtime = "nodejs";
@@ -12,9 +13,9 @@ const HIT = "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=60
 const MISS = "public, max-age=3600, s-maxage=86400";
 
 /**
- * A photo of a place, served from Pyrius and cached at the edge: GET /api/photo?title=Maldives&w=960
- * (&o=portrait for tall cards, &meta=1 for the photographer's credit as JSON). Pexels travel
- * photography first, then the place's Wikipedia photo (never a flag or a map).
+ * A photo of a place, served or redirected by Pyrius and cached at the edge: GET /api/photo?title=Maldives&w=960
+ * (&o=portrait for tall cards, &meta=1 for the photographer's credit as JSON). Travel
+ * photography (Unsplash, then Pexels) first, then the place's Wikipedia photo (never a flag or a map).
  */
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
@@ -32,7 +33,13 @@ export async function GET(req: Request) {
   let img: Awaited<ReturnType<typeof photoBytes>> = null;
   let credit = "Wikimedia Commons";
   try {
-    // Professional travel photography first; Wikipedia's own photo when Pexels has nothing.
+    // Unsplash first: its images load from its own CDN, as its guidelines ask.
+    const best = await unsplashPhoto(title, width, orientation).catch((e) => (console.error("unsplash", (e as Error).message), null));
+    if (best) {
+      if (q.get("meta") === "1") return NextResponse.json({ credit: best.credit }, { headers: { "Cache-Control": HIT } });
+      return new Response(null, { status: 302, headers: { Location: best.url, "Cache-Control": HIT } });
+    }
+    // Then Pexels, then Wikipedia's own photo.
     const pro = await pexelsPhoto(title, width, orientation).catch((e) => (console.error("pexels", (e as Error).message), null));
     if (pro) {
       img = await photoBytes(pro.url);
