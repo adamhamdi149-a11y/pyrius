@@ -470,6 +470,7 @@ function searchFailure(err: unknown) {
     timeout: "Tell the user the flight search took too long and offer to try again. Do not invent flights.",
     unavailable: "Tell the user the flight search couldn't be completed and offer to try again. Do not invent flights.",
     bad_request: "Check the trip details with the user; the provider couldn't run this search.",
+    past_date: "Tell the user Google Flights no longer sells flights for that departure date (it may already be the next day where the flight leaves) and ask for a later date. Do not invent flights.",
   };
   return { ok: false, error: code, message: PROVIDER_MESSAGES[code as keyof typeof PROVIDER_MESSAGES] ?? PROVIDER_MESSAGES.unavailable, guidance: guidance[code] ?? guidance.unavailable, flights_found: 0 };
 }

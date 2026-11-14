@@ -19,6 +19,7 @@ export function PlacePhoto({
   fade = 0.85,
   size = "medium",
   portrait = false,
+  code,
 }: {
   title?: string;
   style?: StyleProp<ViewStyle>;
@@ -28,11 +29,13 @@ export function PlacePhoto({
   size?: PhotoSize;
   /** A tall box: asks for a tall photo. */
   portrait?: boolean;
+  /** The airport of the place, when known: its city's photo from the website. */
+  code?: string;
 }) {
   const accent = useAccent();
   const { L } = useStore();
   const [shown, setShown] = useState<string | null>(null);
-  const uri = title ? photoUri(title, size, portrait) : null;
+  const uri = title ? photoUri(title, size, portrait, code) : null;
   const by = usePhotoCredit(title, credit && shown === uri);
   return (
     <View style={[s.root, style]}>
