@@ -89,7 +89,7 @@ export default function TripDetail() {
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
-        <PlacePhoto title={tripPhoto(trip)} style={[s.hero, { paddingTop: insets.top }]} fade={0.95}>
+        <PlacePhoto title={tripPhoto(trip)} size="large" portrait style={[s.hero, { paddingTop: insets.top }]} fade={0.95}>
           <View style={{ flex: 1 }} />
           <View style={{ padding: 20, gap: 8 }}>
             <StatusPill status={status} />
