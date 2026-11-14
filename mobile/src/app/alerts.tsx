@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ArrowDown } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glow } from "~/components/Glow";
 import { OnboardingScreen } from "~/components/Onboarding";
 import { toast } from "~/components/Toast";
@@ -25,7 +25,7 @@ function Illustration() {
   const from = settings.homeAirport || "YUL";
   return (
     <View style={s.ill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Animated.View entering={FadeInDown.delay(350).duration(900).springify().damping(18)} style={s.notice}>
+      <Animated.View entering={FadeIn.delay(300).duration(600)} style={s.notice}>
         <View style={s.noticeIcon}>
           <View style={[s.dotOrb, { backgroundColor: accent.accent, boxShadow: `0 0 10px ${accent.line}` }]} />
         </View>

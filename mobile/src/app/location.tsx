@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming, ZoomIn } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from "react-native-reanimated";
 import { AirportPicker } from "~/components/AirportPicker";
 import { OnboardingScreen } from "~/components/Onboarding";
 import { toast } from "~/components/Toast";
@@ -38,7 +38,7 @@ function Radar({ code }: { code: string }) {
         <View style={[s.blip, { right: 40, top: 120 }]} />
         <View style={[s.blip, { left: 92, bottom: 52 }]} />
         <View style={[s.center, { backgroundColor: accent.accent, boxShadow: `0 0 0 6px ${accent.soft}, 0 0 30px ${accent.line}` }]} />
-        <Animated.View key={code} entering={ZoomIn.springify().damping(16)} style={s.chipWrap}>
+        <Animated.View key={code} entering={FadeIn.duration(250)} style={s.chipWrap}>
           <View style={s.chip}>
             <T weight="mono" style={{ fontSize: 13, color: accent.hi }}>{code}</T>
             <T style={{ fontSize: 13, color: colors.text2 }}>{a?.city ?? ""}</T>

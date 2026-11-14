@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronLeft, MoreHorizontal } from "lucide-react-native";
+import { ChevronLeft, MoreHorizontal, Pencil, Trash2 } from "lucide-react-native";
 import { useState } from "react";
-import { ActionSheetIOS, Alert, Platform, ScrollView, StyleSheet, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import { ScrollView, StyleSheet, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { byKind, tripDates, tripStatus } from "@/lib/trips/organize";
 import type { Reservation, ReservationKind } from "@/lib/trips/types";
 import { toISODate } from "@/lib/utils";
+import { confirmDialog, showActions, showDialog } from "~/components/Dialog";
 import { PlacePhoto } from "~/components/PlacePhoto";
 import { dateRange, tripPhoto } from "~/components/trips/format";
 import { EmptyCategory, KIND_ICON, ReservationCard, ReservationSheet } from "~/components/trips/Reservations";
@@ -52,31 +53,31 @@ export default function TripDetail() {
   const menu = () => {
     const remove = () => {
       if (trip.reservations.length) {
-        Alert.alert(L("This trip has bookings", "Ce voyage a des réservations"), L("Trips with bookings stay in My Trips so you never lose a confirmation.", "Les voyages avec réservations restent dans Mes voyages pour ne jamais perdre une confirmation."));
+        showDialog({
+          title: L("This trip has bookings", "Ce voyage a des réservations"),
+          message: L("Trips with bookings stay in My Trips so you never lose a confirmation.", "Les voyages avec réservations restent dans Mes voyages pour ne jamais perdre une confirmation."),
+        });
         return;
       }
-      Alert.alert(L("Delete this trip?", "Supprimer ce voyage ?"), trip.destination, [
-        { text: L("Cancel", "Annuler"), style: "cancel" },
-        {
-          text: L("Delete", "Supprimer"),
-          style: "destructive",
-          onPress: () => {
-            deleteTrip(trip.id);
-            router.back();
-          },
+      confirmDialog({
+        title: L("Delete this trip?", "Supprimer ce voyage ?"),
+        message: L(`${trip.destination} will be removed from My Trips.`, `${trip.destination} sera retiré de Mes voyages.`),
+        cancel: L("Cancel", "Annuler"),
+        confirm: L("Delete", "Supprimer"),
+        destructive: true,
+        onConfirm: () => {
+          deleteTrip(trip.id);
+          router.back();
         },
-      ]);
+      });
     };
-    const options = [L("Edit trip", "Modifier le voyage"), L("Delete trip", "Supprimer le voyage"), L("Cancel", "Annuler")];
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions({ options, destructiveButtonIndex: 1, cancelButtonIndex: 2 }, (i) => (i === 0 ? setEditing(true) : i === 1 ? remove() : undefined));
-    } else {
-      Alert.alert(trip.destination, undefined, [
-        { text: options[0], onPress: () => setEditing(true) },
-        { text: options[1], style: "destructive", onPress: remove },
-        { text: options[2], style: "cancel" },
-      ]);
-    }
+    showActions({
+      title: trip.destination,
+      actions: [
+        { label: L("Edit trip", "Modifier le voyage"), icon: <Pencil color={colors.text} size={18} strokeWidth={1.8} />, onPress: () => setEditing(true) },
+        { label: L("Delete trip", "Supprimer le voyage"), tone: "destructive", icon: <Trash2 color={colors.error} size={18} strokeWidth={1.8} />, onPress: remove },
+      ],
+    });
   };
 
   const sections: { kind: ReservationKind; title: string }[] = [
@@ -102,7 +103,7 @@ export default function TripDetail() {
             const items = byKind(trip, kind);
             const Icon = KIND_ICON[kind];
             return (
-              <Animated.View key={kind} entering={FadeInDown.delay(80 * i).springify().damping(20)} style={{ gap: 10 }}>
+              <Animated.View key={kind} entering={FadeIn.delay(50 * i).duration(300)} style={{ gap: 10 }}>
                 <View style={s.sectionHead}>
                   <Icon color={colors.text2} size={17} strokeWidth={1.8} />
                   <T weight="semibold" style={{ fontSize: 17, flex: 1 }}>{title}</T>

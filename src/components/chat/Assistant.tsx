@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { OrbStage } from "@/components/ai/OrbStage";
 import { CarResults, BusinessDirectory } from "@/components/results/CarResults";
 import { AirportPicker } from "@/components/flow/AirportPicker";
-import { echo, GREETING, resultsMessage, stepMessage } from "@/components/flow/copy";
+import { echo, GREETING, resultsMessage, stepMessage } from "@/lib/flights/copy";
 import { FlowPanel, type EditTarget, type FlowHandlers, type ResultSort } from "@/components/flow/FlowPanel";
 import { TripEditor } from "@/components/flow/TripEditor";
 import { FlightResults } from "@/components/results/FlightResults";

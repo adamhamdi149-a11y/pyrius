@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useStore } from "~/lib/store";
 import { accentFor, colors, fonts, radii } from "~/lib/theme";
 
@@ -31,7 +31,7 @@ export function Headline({ before, serif, after, size = 38, center, style }: { b
 /** Fades content up when a screen opens; staggered by `i`. */
 export function Rise({ i = 0, children, style }: { i?: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
-    <Animated.View entering={FadeInDown.duration(700).delay(120 + i * 90).springify().damping(22)} style={style}>
+    <Animated.View entering={FadeIn.duration(450).delay(80 + i * 70)} style={style}>
       {children}
     </Animated.View>
   );
@@ -49,7 +49,7 @@ export function PrimaryButton({ label, onPress, busy, disabled, style }: { label
         tap();
         onPress();
       }}
-      style={({ pressed }) => [s.primary, { backgroundColor: accent.accent, shadowColor: accent.accent, opacity: disabled ? 0.45 : pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }, style]}
+      style={({ pressed }) => [s.primary, { backgroundColor: accent.accent, shadowColor: accent.accent, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 }, style]}
     >
       {busy ? <ActivityIndicator color={accent.ink} /> : <T weight="semibold" style={{ color: accent.ink, fontSize: 16 }}>{label}</T>}
     </Pressable>

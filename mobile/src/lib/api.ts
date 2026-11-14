@@ -81,13 +81,17 @@ async function send(path: string, b: Body, signal?: AbortSignal) {
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(b.json ?? {});
   }
-  let res: Awaited<ReturnType<typeof fetch>>;
-  try {
-    res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body, signal });
-  } catch (err) {
-    if ((err as Error).name === "AbortError") throw err;
-    if (__DEV__) console.warn(`[api] ${path} failed:`, (err as Error).message);
-    throw new ApiError(OFFLINE, 0, "offline");
+  let res: Awaited<ReturnType<typeof fetch>> | undefined;
+  // A phone switching between Wi-Fi and mobile data drops a connection now and then: try once more.
+  for (let attempt = 0; !res; attempt++) {
+    try {
+      res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body, signal });
+    } catch (err) {
+      if ((err as Error).name === "AbortError") throw err;
+      if (__DEV__) console.warn(`[api] ${path} failed:`, (err as Error).message);
+      if (attempt >= 1) throw new ApiError(OFFLINE, 0, "offline");
+      await new Promise((r) => setTimeout(r, 700));
+    }
   }
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string; code?: string };

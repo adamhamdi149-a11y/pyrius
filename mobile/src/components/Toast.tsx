@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radii } from "~/lib/theme";
 import { T } from "./ui";
@@ -31,7 +31,7 @@ export function ToastHost() {
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { paddingTop: insets.top + 8, alignItems: "center" }]}>
       {items.map((t) => (
-        <Animated.View key={t.id} entering={FadeInUp.springify().damping(20)} exiting={FadeOutUp.duration(200)} style={s.toast} accessibilityLiveRegion="polite" accessibilityRole="alert">
+        <Animated.View key={t.id} entering={FadeIn.duration(220)} exiting={FadeOut.duration(200)} style={s.toast} accessibilityLiveRegion="polite" accessibilityRole="alert">
           <View style={[s.dot, { backgroundColor: t.tone === "error" ? colors.error : t.tone === "ok" ? colors.success : colors.text3 }]} />
           <View style={{ flex: 1 }}>
             <T weight="medium" style={{ fontSize: 14 }}>{t.title}</T>

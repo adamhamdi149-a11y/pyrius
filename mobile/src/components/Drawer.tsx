@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { BellRing, Bookmark, Compass, Luggage, Plus, Search, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Conversation } from "@/lib/types";
 import { useStore } from "~/lib/store";
 import { colors, fonts, radii, noOutline } from "~/lib/theme";
+import { confirmDialog } from "./Dialog";
 import { MiniOrb } from "./MiniOrb";
 import { IconButton, T, tap, useAccent } from "./ui";
 
@@ -75,10 +76,14 @@ export function Drawer({ open, onClose, onNew }: { open: boolean; onClose: () =>
     router.push(path);
   };
   const remove = (c: Conversation) =>
-    Alert.alert(L("Delete this conversation?", "Supprimer cette conversation ?"), c.title, [
-      { text: L("Cancel", "Annuler"), style: "cancel" },
-      { text: L("Delete", "Supprimer"), style: "destructive", onPress: () => deleteConversation(c.id) },
-    ]);
+    confirmDialog({
+      title: L("Delete this conversation?", "Supprimer cette conversation ?"),
+      message: c.title,
+      cancel: L("Cancel", "Annuler"),
+      confirm: L("Delete", "Supprimer"),
+      destructive: true,
+      onConfirm: () => deleteConversation(c.id),
+    });
 
   const email = auth.mode === "cloud" ? auth.email : undefined;
 

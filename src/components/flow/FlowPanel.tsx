@@ -2,7 +2,8 @@
 import { ArrowDownUp, BadgeDollarSign, CalendarDays, ChevronDown, Loader2, MapPin, PlaneLanding, PlaneTakeoff, Route, Search, SlidersHorizontal, Timer, Users } from "lucide-react";
 import { useState } from "react";
 import { findAirport } from "@/lib/data/world";
-import { CABIN_LABEL, CABIN_LABEL_FR, searchProblems, travelersOf, tripKind, type FlightStep, type TripKind, type Travelers } from "@/lib/flights/workflow";
+import { cabinText, travelersText } from "@/lib/flights/copy";
+import { searchProblems, travelersOf, tripKind, type FlightStep, type TripKind, type Travelers } from "@/lib/flights/workflow";
 import type { Cabin, TripLeg, TripPreferences } from "@/lib/types";
 import { cx, formatRange } from "@/lib/utils";
 import { AirportPicker } from "./AirportPicker";
@@ -26,16 +27,7 @@ export interface FlowHandlers {
   onEdit: (t: EditTarget) => void;
 }
 
-export function travelersText(t: TripPreferences, locale: "en" | "fr") {
-  const fr = locale === "fr";
-  const p = travelersOf(t);
-  const parts = [fr ? `${p.adults} adulte${p.adults > 1 ? "s" : ""}` : `${p.adults} adult${p.adults > 1 ? "s" : ""}`];
-  if (p.children) parts.push(fr ? `${p.children} enfant${p.children > 1 ? "s" : ""}` : `${p.children} child${p.children > 1 ? "ren" : ""}`);
-  if (p.infants) parts.push(fr ? `${p.infants} bébé${p.infants > 1 ? "s" : ""}` : `${p.infants} infant${p.infants > 1 ? "s" : ""}`);
-  return parts.join(", ");
-}
-
-export const cabinText = (t: TripPreferences, locale: "en" | "fr") => (locale === "fr" ? CABIN_LABEL_FR : CABIN_LABEL)[t.cabin ?? "economy"];
+export { cabinText, travelersText } from "@/lib/flights/copy";
 
 /** The control for the workflow's current step, shown under Pyrius's latest message. */
 export function FlowPanel({ trip, step, today, locale, homeCode, busy, hadResults, note, h }: { trip: TripPreferences; step: FlightStep; today: string; locale: "en" | "fr"; homeCode?: string; busy: boolean; hadResults: boolean; note?: string | null; h: FlowHandlers }) {

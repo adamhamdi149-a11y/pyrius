@@ -1,11 +1,10 @@
-import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronLeft, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { Easing, FadeIn, FadeOut, SlideInLeft, SlideInRight, SlideOutLeft, SlideOutRight, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, FadeOut, SlideInLeft, SlideInRight, SlideOutLeft, SlideOutRight, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { SKIP, type Answers } from "@/lib/explore/engine";
@@ -14,7 +13,7 @@ import { pick, useLang } from "~/components/explore/parts";
 import { PlacePhoto } from "~/components/PlacePhoto";
 import { IconButton, T } from "~/components/ui";
 import { useExplore } from "~/lib/explore";
-import { placePhoto } from "~/lib/photos";
+import { prefetchPhotos } from "~/lib/photos";
 import { useStore } from "~/lib/store";
 import { colors, fonts } from "~/lib/theme";
 
@@ -22,11 +21,7 @@ const EASE = Easing.bezier(0.16, 1, 0.3, 1);
 
 /** Warms the photo cache for the next questions, so each one appears instantly. */
 function prefetch(from: number) {
-  for (const q of QUESTIONS.slice(from, from + 2)) {
-    for (const o of q.options) {
-      void placePhoto(o.photo).then((url) => (url ? Image.prefetch(url) : false));
-    }
-  }
+  prefetchPhotos(QUESTIONS.slice(from, from + 2).flatMap((q) => q.options.map((o) => o.photo)));
 }
 
 function Progress({ index, total }: { index: number; total: number }) {
@@ -47,7 +42,7 @@ function Choice({ option, state, onChoose }: { option: ExploreOption; state: "id
   const lang = useLang();
   const press = useSharedValue(1);
   useEffect(() => {
-    press.set(withSpring(state === "chosen" ? 1.03 : state === "other" ? 0.95 : 1, { damping: 16, stiffness: 220 }));
+    press.set(withTiming(state === "other" ? 0.98 : 1, { duration: 260, easing: EASE }));
   }, [state, press]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const dim = useAnimatedStyle(() => ({ opacity: withTiming(state === "other" ? 0.35 : 1, { duration: 220 }) }));
@@ -57,9 +52,7 @@ function Choice({ option, state, onChoose }: { option: ExploreOption; state: "id
         accessibilityRole="button"
         accessibilityLabel={`${pick(option.title, lang)}. ${pick(option.caption, lang)}`}
         accessibilityState={{ selected: state === "chosen" || state === "previous" }}
-        onPressIn={() => state === "idle" && press.set(withTiming(0.98, { duration: 90 }))}
-        onPressOut={() => state === "idle" && press.set(withSpring(1))}
-        onPress={onChoose}
+                onPress={onChoose}
         disabled={state === "chosen" || state === "other"}
         style={{ flex: 1 }}
       >

@@ -1,6 +1,6 @@
 import { BedDouble, Car, Plane } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { byKind, tripDates, tripStatus } from "@/lib/trips/organize";
 import type { Trip, TripStatus } from "@/lib/trips/types";
 import { toISODate } from "@/lib/utils";
@@ -34,7 +34,7 @@ export function TripCard({ trip, index, onPress }: { trip: Trip; index: number; 
     { Icon: Car, n: byKind(trip, "car").length, label: L("rental cars", "voitures") },
   ];
   return (
-    <Animated.View entering={FadeInDown.delay(60 * index).springify().damping(20)}>
+    <Animated.View entering={FadeIn.delay(40 * index).duration(320)}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${trip.destination}, ${dateRange(start, end, lang)}, ${STATUS_LABEL[status][lang]}`}
@@ -42,7 +42,7 @@ export function TripCard({ trip, index, onPress }: { trip: Trip; index: number; 
           tap();
           onPress();
         }}
-        style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]}
+        style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
       >
         <PlacePhoto title={tripPhoto(trip)} style={s.card}>
           <View style={s.top}>
