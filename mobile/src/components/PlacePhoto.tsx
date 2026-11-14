@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { photoUri, type PhotoSize } from "~/lib/photos";
+import { photoUri, usePhotoCredit, type PhotoSize } from "~/lib/photos";
 import { useStore } from "~/lib/store";
 import { colors } from "~/lib/theme";
 import { T, useAccent } from "./ui";
@@ -18,6 +18,7 @@ export function PlacePhoto({
   credit = true,
   fade = 0.85,
   size = "medium",
+  portrait = false,
 }: {
   title?: string;
   style?: StyleProp<ViewStyle>;
@@ -25,11 +26,14 @@ export function PlacePhoto({
   credit?: boolean;
   fade?: number;
   size?: PhotoSize;
+  /** A tall box: asks for a tall photo. */
+  portrait?: boolean;
 }) {
   const accent = useAccent();
   const { L } = useStore();
   const [shown, setShown] = useState<string | null>(null);
-  const uri = title ? photoUri(title, size) : null;
+  const uri = title ? photoUri(title, size, portrait) : null;
+  const by = usePhotoCredit(title, credit && shown === uri);
   return (
     <View style={[s.root, style]}>
       <LinearGradient colors={[accent.deep, colors.surface2, colors.bg2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -47,9 +51,9 @@ export function PlacePhoto({
       ) : null}
       <LinearGradient colors={["rgba(9,10,13,0)", "rgba(9,10,13,0.15)", `rgba(9,10,13,${fade})`]} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       {children}
-      {credit && shown === uri ? (
-        <T style={s.credit} accessibilityLabel={L("Photo from Wikimedia Commons", "Photo de Wikimedia Commons")}>
-          Wikimedia Commons
+      {credit && shown === uri && by ? (
+        <T style={s.credit} accessibilityLabel={L(`Photo: ${by}`, `Photo : ${by}`)}>
+          {by}
         </T>
       ) : null}
     </View>

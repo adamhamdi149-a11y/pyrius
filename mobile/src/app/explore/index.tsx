@@ -23,14 +23,14 @@ function Welcome({ onStart }: { onStart: () => void }) {
   const { height } = useWindowDimensions();
   const [i, setI] = useState(0);
   useEffect(() => {
-    prefetchPhotos(BACKDROPS, "large");
+    prefetchPhotos(BACKDROPS, "large", true);
     const id = setInterval(() => setI((x) => (x + 1) % BACKDROPS.length), 4200);
     return () => clearInterval(id);
   }, []);
   return (
     <View style={{ flex: 1 }}>
       <Animated.View key={BACKDROPS[i]} entering={FadeIn.duration(1100)} exiting={FadeOut.duration(1100)} style={StyleSheet.absoluteFill}>
-        <PlacePhoto title={BACKDROPS[i]} size="large" style={StyleSheet.absoluteFill} fade={0.96} credit={false} />
+        <PlacePhoto title={BACKDROPS[i]} size="large" portrait style={StyleSheet.absoluteFill} fade={0.96} credit={false} />
       </Animated.View>
       <View style={[s.welcome, { paddingBottom: insets.bottom + 28, minHeight: height }]}>
         <Animated.View entering={FadeIn.delay(200).duration(700)} style={s.badge}>
@@ -109,7 +109,7 @@ export default function ExploreHome() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
               {saved.map((d) => (
                 <Pressable key={d.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/explore/[id]", params: { id: d.id } })}>
-                  <PlacePhoto title={d.photo} size="small" style={s.mini} credit={false}>
+                  <PlacePhoto title={d.photo} size="small" portrait style={s.mini} credit={false}>
                     <View style={{ position: "absolute", top: 8, right: 8 }}>
                       <SaveButton saved onPress={() => ex.toggleSaved(d.id)} light />
                     </View>

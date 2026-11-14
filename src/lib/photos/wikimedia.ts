@@ -43,6 +43,9 @@ type Pages = { query?: { pages?: { missing?: boolean; pageprops?: { wikibase_ite
 type Claims = { claims?: { P18?: { mainsnak?: { datavalue?: { value?: string } } }[] } };
 type FileInfo = { query?: { pages?: { imageinfo?: { thumburl?: string; url?: string; mime?: string }[] }[] } };
 
+/** Flags, maps, emblems and drawings: never a picture of the place itself. */
+const NOT_A_PHOTO = /flag|map|locator|location|orthographic|coat[_ ]of[_ ]arms|emblem|seal[_ ]of|logo|\.svg/i;
+
 /** The image address for a place at about `width` pixels wide, or null when the article has no photo. Throws PhotoUnavailable. */
 export async function photoUrl(title: string, width: PhotoWidth): Promise<string | null> {
   const page: Pages = await json<Pages>(
@@ -59,15 +62,16 @@ export async function photoUrl(title: string, width: PhotoWidth): Promise<string
         `https://commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo&iiprop=url|mime&iiurlwidth=${width}&titles=${encodeURIComponent(`File:${file}`)}`,
       );
       const ii = info?.query?.pages?.[0]?.imageinfo?.[0];
-      if (ii && /^image\/(jpeg|png|webp)$/.test(ii.mime ?? "")) return ii.thumburl ?? ii.url ?? null;
+      if (ii && /^image\/(jpeg|png|webp)$/.test(ii.mime ?? "") && !NOT_A_PHOTO.test(file)) return ii.thumburl ?? ii.url ?? null;
     }
   }
-  return p.thumbnail?.source ?? null;
+  const thumb = p.thumbnail?.source;
+  return thumb && !NOT_A_PHOTO.test(decodeURIComponent(thumb)) ? thumb : null;
 }
 
 const MAX_BYTES = 6 * 1024 * 1024;
 /** Wikimedia's image servers (thumbnails moved from upload. to thumb.). */
-const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org"]);
+const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.pexels.com"]);
 
 /** The photo's bytes, or null for an address that isn't one of Wikimedia's image hosts. Throws PhotoUnavailable. */
 export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type: string } | null> {

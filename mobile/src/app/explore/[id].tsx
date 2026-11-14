@@ -65,7 +65,7 @@ export default function DestinationScreen() {
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
-        <PlacePhoto title={d.photo} style={[s.hero, { paddingTop: insets.top }]} fade={0.96}>
+        <PlacePhoto title={d.photo} size="large" portrait style={[s.hero, { paddingTop: insets.top }]} fade={0.96}>
           <View style={{ flex: 1 }} />
           <View style={{ padding: 22, gap: 6 }}>
             <T style={{ fontSize: 12, letterSpacing: 1, color: "rgba(255,255,255,0.75)" }}>{pick(d.country, lang).toUpperCase()}</T>
