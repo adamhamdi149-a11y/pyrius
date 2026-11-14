@@ -4,9 +4,22 @@ import type { VoiceCallbacks, VoiceEngine } from "./types";
 /** dBFS from the recorder → 0–1. */
 const level = (db?: number) => (db === undefined ? 0 : Math.max(0, Math.min(1, (db + 55) / 50)));
 const SPEECH = 0.3;
-const END_SILENCE_MS = 1100;
+const END_SILENCE_MS = 800;
 const MAX_TURN_MS = 30_000;
 const IDLE_RESTART_MS = 20_000;
+
+/**
+ * A reply in two parts for speaking: the first sentence, which is ready to play quickly, and the
+ * rest, synthesized while the first one plays.
+ */
+export function splitForSpeech(text: string): string[] {
+  const t = text.trim();
+  if (t.length < 140) return [t];
+  const m = t.slice(0, 220).match(/^(.{25,}?[.!?…])\s+/s);
+  if (!m) return [t];
+  const rest = t.slice(m[0].length).trim();
+  return rest ? [m[1], rest] : [t];
+}
 
 interface Deps {
   recorder: AudioRecorder;
@@ -27,6 +40,8 @@ export class TurnVoice implements VoiceEngine {
   readonly kind = "turns" as const;
   private poll: ReturnType<typeof setInterval> | null = null;
   private player: AudioPlayer | null = null;
+  /** Audio for the parts of the reply still to play, in order (being synthesized or ready). */
+  private queue: Promise<string | null>[] = [];
   private closed = false;
   private muted = false;
   private busy = false;
@@ -132,8 +147,16 @@ export class TurnVoice implements VoiceEngine {
       if (this.closed) return;
       if (reply) {
         this.cb.onTranscript({ id: `a-${Date.now()}`, role: "assistant", text: reply, final: true, persisted: true });
-        const audio = await this.deps.speak(reply);
-        if (audio && !this.closed) return this.play(audio);
+        // All parts are requested at once; the first starts playing as soon as it's ready.
+        let told = false;
+        this.queue = splitForSpeech(reply).map((part) =>
+          this.deps.speak(part).catch((e: Error) => {
+            if (!told && !this.closed) this.cb.onError(e.message, "server");
+            told = true;
+            return null;
+          }),
+        );
+        if (await this.playNext()) return;
       }
     } catch (e) {
       this.cb.onError((e as Error).message, "server");
@@ -141,6 +164,19 @@ export class TurnVoice implements VoiceEngine {
       this.busy = false;
     }
     this.listen();
+  }
+
+  /** Plays the next part of the reply. False when there's nothing left to say. */
+  private async playNext(): Promise<boolean> {
+    while (this.queue.length) {
+      const uri = await this.queue.shift()!;
+      if (this.closed) return true;
+      if (uri) {
+        this.play(uri);
+        return true;
+      }
+    }
+    return false;
   }
 
   private play(uri: string) {
@@ -163,15 +199,17 @@ export class TurnVoice implements VoiceEngine {
     p.play();
   }
 
-  private finishSpeaking() {
+  private async finishSpeaking() {
     this.player?.remove();
     this.player = null;
+    if (await this.playNext()) return;
     this.cb.onLevels(0, 0);
     this.listen();
   }
 
   interrupt() {
     if (!this.player) return;
+    this.queue = [];
     this.player.pause();
     this.finishSpeaking();
   }
@@ -188,6 +226,7 @@ export class TurnVoice implements VoiceEngine {
   }
 
   async sendText(text: string) {
+    this.queue = [];
     await this.release();
     this.player?.pause();
     this.player?.remove();
@@ -197,6 +236,7 @@ export class TurnVoice implements VoiceEngine {
 
   stop() {
     this.closed = true;
+    this.queue = [];
     this.release();
     this.player?.remove();
     this.player = null;

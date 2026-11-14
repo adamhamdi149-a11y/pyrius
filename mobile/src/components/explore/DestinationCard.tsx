@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { CalendarDays, Plane, Wallet } from "lucide-react-native";
 import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { bestSeason, BUDGET_LABELS, budgetSymbol, type Recommendation } from "@/lib/explore/engine";
 import { useExplore } from "~/lib/explore";
 import { askPyrius } from "~/lib/handoff";
@@ -9,7 +9,7 @@ import { useStore } from "~/lib/store";
 import { colors, fonts, radii } from "~/lib/theme";
 import { PlacePhoto } from "../PlacePhoto";
 import { T, tap, useAccent } from "../ui";
-import { pick, SaveButton, useLang } from "./parts";
+import { pick, SaveButton, TraitChip, useLang } from "./parts";
 
 /** Asks Pyrius for flights to a destination, in the user's language. */
 export function flightsTo(name: string, airport: string, lang: "en" | "fr") {
@@ -25,7 +25,7 @@ export function DestinationCard({ rec, index }: { rec: Recommendation; index: nu
   const d = rec.destination;
   const open = () => router.push({ pathname: "/explore/[id]", params: { id: d.id } });
   return (
-    <Animated.View entering={FadeInDown.delay(120 * index).duration(600)} style={s.card}>
+    <Animated.View entering={FadeIn.delay(120 * index).duration(600)} style={s.card}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${pick(d.name, lang)}, ${pick(d.country, lang)}`} onPress={open}>
         <PlacePhoto title={d.photo} style={s.photo}>
           <View style={s.photoTop}>
@@ -41,21 +41,15 @@ export function DestinationCard({ rec, index }: { rec: Recommendation; index: nu
         </PlacePhoto>
       </Pressable>
       <View style={s.body}>
-        <View style={{ gap: 10 }}>
-          {rec.reasons.length ? (
-            rec.reasons.map((r) => (
-              <View key={r.pole} style={s.reason}>
-                <View style={[s.bullet, { backgroundColor: accent.hi }]} />
-                <T style={{ flex: 1, fontSize: 15, lineHeight: 21 }}>
-                  <T weight="semibold" style={{ fontSize: 15 }}>{`${pick(r.label, lang)}: `}</T>
-                  <T style={{ fontSize: 15, color: colors.text2 }}>{pick(r.text, lang)}</T>
-                </T>
-              </View>
-            ))
-          ) : (
-            <T style={{ fontSize: 15, lineHeight: 21, color: colors.text2 }}>{pick(d.about, lang)}</T>
-          )}
-        </View>
+        {rec.reasons.length ? (
+          <View style={s.tags}>
+            {rec.reasons.map((r) => (
+              <TraitChip key={r.pole} label={pick(r.label, lang)} />
+            ))}
+          </View>
+        ) : (
+          <T style={{ fontSize: 15, lineHeight: 21, color: colors.text2 }} numberOfLines={2}>{pick(d.about, lang)}</T>
+        )}
         <View style={s.meta}>
           <View style={s.metaItem}>
             <CalendarDays color={colors.text3} size={15} />
@@ -101,8 +95,7 @@ const s = StyleSheet.create({
   match: { height: 30, paddingHorizontal: 12, borderRadius: radii.pill, justifyContent: "center" },
   name: { fontFamily: fonts.serif, fontSize: 40, lineHeight: 44, color: colors.white },
   body: { padding: 18, gap: 16 },
-  reason: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bullet: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   meta: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontSize: 13, color: colors.text2 },

@@ -2,30 +2,28 @@ import { router, useLocalSearchParams } from "expo-router";
 import { CalendarDays, ChevronLeft, Luggage, MessageCircle, PlaneLanding, Wallet } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { airportLabel } from "@/lib/data/world";
 import { destinationById } from "@/lib/explore/destinations";
 import { bestSeason, BUDGET_LABELS, budgetSymbol, matchScore, MIN_ANSWERS, reasonsFor } from "@/lib/explore/engine";
 import { poleOf, type Trait } from "@/lib/explore/traits";
 import { flightsTo } from "~/components/explore/DestinationCard";
-import { pick, SaveButton, useLang } from "~/components/explore/parts";
+import { pick, SaveButton, TraitChip, useLang } from "~/components/explore/parts";
 import { PlacePhoto } from "~/components/PlacePhoto";
-import { IconButton, OutlineButton, PrimaryButton, T } from "~/components/ui";
+import { IconButton, OutlineButton, PrimaryButton, T, useAccent } from "~/components/ui";
 import { useExplore } from "~/lib/explore";
 import { askPyrius } from "~/lib/handoff";
 import { useStore } from "~/lib/store";
 import { colors, fonts, radii } from "~/lib/theme";
 import { useTrips } from "~/lib/trips";
 
-function Fact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function Fact({ icon, label, value, last }: { icon: ReactNode; label: string; value: string; last?: boolean }) {
   return (
-    <View style={s.fact}>
+    <View style={[s.fact, !last && s.factLine]}>
       {icon}
-      <View style={{ flex: 1 }}>
-        <T style={{ fontSize: 12, color: colors.text3 }}>{label}</T>
-        <T weight="medium" style={{ fontSize: 15 }}>{value}</T>
-      </View>
+      <T style={{ flex: 1, fontSize: 15, color: colors.text2 }}>{label}</T>
+      <T weight="medium" style={{ fontSize: 15, textAlign: "right", flexShrink: 1 }} numberOfLines={2}>{value}</T>
     </View>
   );
 }
@@ -37,6 +35,7 @@ export default function DestinationScreen() {
   const { L } = useStore();
   const lang = useLang();
   const ex = useExplore();
+  const accent = useAccent();
   const { createTrip } = useTrips();
   const d = destinationById(String(id));
 
@@ -75,33 +74,33 @@ export default function DestinationScreen() {
           </View>
         </PlacePhoto>
 
-        <View style={{ paddingHorizontal: 20, gap: 22, marginTop: 20 }}>
+        <View style={{ paddingHorizontal: 20, gap: 32, marginTop: 28 }}>
           {known ? (
-            <Animated.View entering={FadeInDown.duration(500)} style={s.why}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <T weight="semibold" style={{ fontSize: 17 }}>{L("Why Pyrius recommends it", "Pourquoi Pyrius le recommande")}</T>
-                <T weight="mono" style={{ fontSize: 14, color: colors.text2 }}>{L(`${Math.round(matchScore(ex.profile, d) * 100)}% match`, `${Math.round(matchScore(ex.profile, d) * 100)} %`)}</T>
+            <Animated.View entering={FadeIn.duration(450)} style={{ gap: 14 }}>
+              <T weight="medium" style={s.kicker}>{L("WHY IT SUITS YOU", "POURQUOI IL VOUS CORRESPOND")}</T>
+              <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
+                <T style={[s.match, { color: accent.hi }]}>{`${Math.round(matchScore(ex.profile, d) * 100)}%`}</T>
+                <T style={{ fontSize: 15, lineHeight: 21, color: colors.text2, paddingBottom: 9, flex: 1 }}>{L("match with your travel style", "de compatibilité avec votre style")}</T>
               </View>
               {reasons.length ? (
-                reasons.map((r) => (
-                  <T key={r.pole} style={{ fontSize: 15, lineHeight: 22 }}>
-                    <T weight="semibold" style={{ fontSize: 15 }}>{`${pick(r.label, lang)}: `}</T>
-                    <T style={{ fontSize: 15, color: colors.text2 }}>{pick(r.text, lang)}</T>
-                  </T>
-                ))
+                <View style={s.chips}>
+                  {reasons.map((r) => (
+                    <TraitChip key={r.pole} label={pick(r.label, lang)} />
+                  ))}
+                </View>
               ) : (
-                <T style={{ fontSize: 15, color: colors.text2 }}>{L("A change of scene from your usual style, worth a look.", "Un changement par rapport à votre style habituel, à découvrir.")}</T>
+                <T style={{ fontSize: 15, color: colors.text2 }}>{L("A change of scene from your usual style.", "Un changement de votre style habituel.")}</T>
               )}
             </Animated.View>
           ) : null}
 
-          <Animated.View entering={FadeInDown.delay(100).duration(500)} style={{ gap: 10 }}>
-            <Fact icon={<CalendarDays color={colors.text2} size={18} />} label={L("Best time to visit", "Meilleure période")} value={bestSeason(d.bestMonths, lang)} />
-            <Fact icon={<Wallet color={colors.text2} size={18} />} label={L("Travel budget", "Budget de voyage")} value={`${budgetSymbol(d.budget)} · ${pick(BUDGET_LABELS[d.budget], lang)}`} />
-            <Fact icon={<PlaneLanding color={colors.text2} size={18} />} label={L("Fly into", "Arrivée")} value={airportLabel(d.airport)} />
+          <Animated.View entering={FadeIn.delay(100).duration(450)} style={s.facts}>
+            <Fact icon={<CalendarDays color={colors.text3} size={18} />} label={L("Best time", "Meilleure période")} value={bestSeason(d.bestMonths, lang)} />
+            <Fact icon={<Wallet color={colors.text3} size={18} />} label={L("Budget", "Budget")} value={`${budgetSymbol(d.budget)} · ${pick(BUDGET_LABELS[d.budget], lang)}`} />
+            <Fact icon={<PlaneLanding color={colors.text3} size={18} />} label={L("Fly into", "Arrivée")} value={airportLabel(d.airport)} last />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={{ gap: 10 }}>
+          <Animated.View entering={FadeIn.delay(200).duration(500)} style={{ gap: 10 }}>
             <PrimaryButton label={L(`Search flights to ${name}`, `Chercher des vols pour ${name}`)} onPress={() => flightsTo(name, d.airport, lang)} />
             <OutlineButton
               label={L(`Ask Pyrius about ${name}`, `Demander à Pyrius pour ${name}`)}
@@ -137,8 +136,12 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   hero: { height: 460 },
   name: { fontFamily: fonts.serif, fontSize: 52, lineHeight: 56, color: colors.white },
-  why: { gap: 10, padding: 18, borderRadius: radii.xl, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft },
-  fact: { flexDirection: "row", alignItems: "center", gap: 14, padding: 14, borderRadius: radii.lg, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft },
+  kicker: { fontSize: 11, letterSpacing: 1.4, color: colors.text3 },
+  match: { fontFamily: fonts.serif, fontSize: 64, lineHeight: 66 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  facts: { borderRadius: radii.xl, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft, paddingHorizontal: 16 },
+  fact: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 12 },
+  factLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   bar: { position: "absolute", left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   round: { backgroundColor: "rgba(9,10,13,0.5)", borderRadius: radii.pill },
 });

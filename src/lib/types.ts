@@ -407,6 +407,8 @@ export interface Conversation {
   messages: ChatMessage[];
   prefs: TripPreferences;
   stage: AgentStage;
+  /** What the conversation started out to find (mobile app's welcome choices). Flight controls show only for flights. */
+  focus?: "flights" | "hotels" | "cars";
 }
 
 export interface AgentReply {

@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ArrowUp, Keyboard, Mic, MicOff, SlidersHorizontal, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { messageAttachments, type FlightOffer } from "@/lib/types";
 import { formatTime, money } from "@/lib/utils";
@@ -124,7 +124,7 @@ export default function VoiceScreen() {
 
       <Animated.View style={[{ gap: 14 }, pad]}>
         {v.problem ? (
-          <Animated.View entering={FadeInDown} style={s.problem} accessibilityRole="alert">
+          <Animated.View entering={FadeIn} style={s.problem} accessibilityRole="alert">
             <T style={{ fontSize: 15, textAlign: "center" }}>{v.problem.message}</T>
             {v.problem.kind === "permission" ? (
               <PrimaryButton label={L("Open Settings", "Ouvrir les réglages")} onPress={() => Linking.openSettings()} />
@@ -133,7 +133,7 @@ export default function VoiceScreen() {
             )}
           </Animated.View>
         ) : endedText ? (
-          <Animated.View entering={FadeInDown} style={s.problem}>
+          <Animated.View entering={FadeIn} style={s.problem}>
             <T style={{ fontSize: 15, textAlign: "center", color: colors.text2 }}>{endedText}</T>
             <PrimaryButton label={L("Talk again", "Reparler")} onPress={v.start} />
           </Animated.View>
@@ -153,7 +153,7 @@ export default function VoiceScreen() {
         )}
 
         {flights.length ? (
-          <Animated.View entering={FadeInDown}>
+          <Animated.View entering={FadeIn}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
               {flights.map((o) => (
                 <Pressable key={o.id} accessibilityRole="button" accessibilityLabel={L("See the flights in the chat", "Voir les vols dans la discussion")} onPress={close}>

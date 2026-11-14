@@ -14,7 +14,8 @@ import { liveVoiceAvailable, RealtimeVoice } from "./realtime";
 import { TurnVoice } from "./turns";
 import type { TranscriptLine, VoiceCallbacks, VoiceEngine, VoiceSession, VoiceStatus } from "./types";
 
-const TURN_RECORDING = { ...RecordingPresets.HIGH_QUALITY, numberOfChannels: 1, bitRate: 64000, isMeteringEnabled: true };
+// Speech only: mono at 16 kHz is what transcription uses anyway, and a small file uploads fast.
+const TURN_RECORDING = { ...RecordingPresets.HIGH_QUALITY, numberOfChannels: 1, sampleRate: 16000, bitRate: 32000, isMeteringEnabled: true };
 
 type ToolResult = { output: unknown; prefs: TripPreferences; stage: AgentStage; attachments?: Attachment[]; actions?: ClientAction[]; title?: string };
 export type VoiceProblem = { message: string; kind: "connection" | "permission" | "offline" | "server" | "unsupported" };
@@ -79,7 +80,7 @@ export function useVoice() {
     const id = convId.current;
     if (!id) return null;
     engine.append(id, { role: "user", text, via: "voice" });
-    return (await engine.ask(id, text)).reply;
+    return (await engine.ask(id, text, undefined, undefined, { voice: true })).reply;
   };
 
   const speak = async (text: string) => {
@@ -88,8 +89,8 @@ export function useVoice() {
     const lang = detectLang(text, settings.locale === "fr" ? "fr" : "en");
     const res = await apiRaw("/api/voice/speak", { text, voice: voiceFor(voice, lang), language: lang });
     const bytes = new Uint8Array(await res.arrayBuffer());
-    // Two files in turn, so the next reply never overwrites the one still playing.
-    const file = new File(Paths.cache, `pyrius-reply-${replyFile.current++ % 2}.mp3`);
+    // Files in turn, so a reply (or the next part of it) never overwrites one still playing.
+    const file = new File(Paths.cache, `pyrius-reply-${replyFile.current++ % 6}.mp3`);
     file.create({ overwrite: true });
     file.write(bytes);
     return file.uri;

@@ -1,8 +1,9 @@
 import { Image } from "expo-image";
 import { ArrowUp, AudioLines, Camera, Check, FileText, Image as ImageIcon, Mic, Paperclip, Plus, SlidersHorizontal, X } from "lucide-react-native";
 import { forwardRef, useCallback, useImperativeHandle, useRef, useState, type ComponentRef } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
-import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from "react-native-reanimated";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { overlayHeight, Portal, useBackToClose } from "~/components/Overlay";
 import { toast } from "~/components/Toast";
 import { useDictation } from "~/lib/dictation";
 import { MAX_TOTAL_BYTES, MAX_UPLOADS, pickFiles, pickPhotos, takePhoto, totalSize, UploadError, type PendingUpload } from "~/lib/uploads";
@@ -58,18 +59,29 @@ function Bars({ levels, color }: { levels: number[]; color: string }) {
 }
 
 /** The + button's menu, after ChatGPT's: camera, photos and files, floating just above the chat bar. */
-function AttachMenu({ open, bottom, onClose, onPick }: { open: boolean; bottom: number; onClose: () => void; onPick: (from: "camera" | "photos" | "files") => void }) {
+function AttachMenu(props: { open: boolean; bottom: number; onClose: () => void; onPick: (from: "camera" | "photos" | "files") => void }) {
+  if (!props.open) return null;
+  return (
+    <Portal>
+      <AttachLayer {...props} />
+    </Portal>
+  );
+}
+
+function AttachLayer({ bottom, onClose, onPick }: { bottom: number; onClose: () => void; onPick: (from: "camera" | "photos" | "files") => void }) {
   const { L } = useStore();
+  useBackToClose(onClose);
   const items: { key: "camera" | "photos" | "files"; label: string; icon: React.ReactNode }[] = [
     { key: "camera", label: L("Camera", "Appareil photo"), icon: <Camera color={colors.text} size={21} strokeWidth={1.7} /> },
     { key: "photos", label: L("Photos", "Photos"), icon: <ImageIcon color={colors.text} size={21} strokeWidth={1.7} /> },
     { key: "files", label: L("Files", "Fichiers"), icon: <Paperclip color={colors.text} size={21} strokeWidth={1.7} /> },
   ];
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={L("Close", "Fermer")} />
-      {open ? (
-        <Animated.View entering={ZoomIn.springify().damping(18).stiffness(260)} exiting={FadeOut.duration(120)} style={[s.menu, { bottom }]} accessibilityViewIsModal>
+    <>
+      <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(140)} style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(4,5,7,0.35)" }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={L("Close", "Fermer")} />
+      </Animated.View>
+      <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={[s.menu, { bottom }]} accessibilityViewIsModal>
           {items.map((it) => (
             <Pressable
               key={it.key}
@@ -85,9 +97,8 @@ function AttachMenu({ open, bottom, onClose, onPick }: { open: boolean; bottom: 
               <T style={{ fontSize: 17 }}>{it.label}</T>
             </Pressable>
           ))}
-        </Animated.View>
-      ) : null}
-    </Modal>
+      </Animated.View>
+    </>
   );
 }
 
@@ -97,7 +108,7 @@ function Tray({ uploads, adding, onRemove }: { uploads: PendingUpload[]; adding:
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tray} keyboardShouldPersistTaps="handled">
       {uploads.map((u) => (
-        <Animated.View key={u.id} entering={ZoomIn.duration(160)} exiting={FadeOut.duration(120)} style={s.trayItem}>
+        <Animated.View key={u.id} entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={s.trayItem}>
           {u.kind === "image" ? (
             <Image source={{ uri: u.uri }} style={s.trayThumb} contentFit="cover" accessibilityLabel={u.name} />
           ) : (
@@ -128,7 +139,6 @@ function Tray({ uploads, adding, onRemove }: { uploads: PendingUpload[]; adding:
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ onSend, onVoice, onPrefs, prefs, busy, placeholder, onDraftChange, onFocusChange }, ref) {
   const { L, voice } = useStore();
   const accent = useAccent();
-  const { height } = useWindowDimensions();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const box = useRef<ComponentRef<typeof View>>(null);
   const [text, setText] = useState("");
@@ -151,7 +161,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
       return;
     }
     // The menu floats just above the chat bar, wherever the keyboard has put it.
-    box.current?.measureInWindow((_x, y) => setMenu(Math.max(16, height - y + 10)));
+    box.current?.measureInWindow((_x, y) => setMenu(Math.max(16, overlayHeight() - y + 10)));
   };
 
   const add = async (from: "camera" | "photos" | "files") => {
@@ -213,7 +223,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
 
   if (dictation.state !== "idle") {
     return (
-      <Animated.View layout={LinearTransition.springify().damping(20)} style={[s.card, { borderColor: accent.line }]}>
+      <View style={[s.card, { borderColor: accent.line }]}>
         <View style={s.dictRow} accessibilityLiveRegion="polite">
           {dictation.state === "recording" ? (
             <>
@@ -236,12 +246,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
             <Check color={accent.ink} size={20} strokeWidth={2.6} />
           </Round>
         </View>
-      </Animated.View>
+      </View>
     );
   }
 
   return (
-    <Animated.View ref={box} layout={LinearTransition.springify().damping(22)} style={[open ? s.card : s.pill, focused && { borderColor: colors.borderStrong }]}>
+    <View ref={box} style={[open ? s.card : s.pill, focused && { borderColor: colors.borderStrong }]}>
       <AttachMenu open={menu !== null} bottom={menu ?? 0} onClose={() => setMenu(null)} onPick={add} />
       {uploads.length || adding ? <Tray uploads={uploads} adding={adding} onRemove={remove} /> : null}
       {open ? (
@@ -294,20 +304,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ on
           </Round>
         ) : null}
         {has || !canSpeak || !voice.enabled ? (
-          <Animated.View key="send" entering={ZoomIn.duration(160)}>
+          <Animated.View key="send" entering={FadeIn.duration(140)}>
             <Round label={L("Send", "Envoyer")} onPress={submit} accent={has && !busy && !adding ? accent.accent : colors.surface3} disabled={!has || busy || adding}>
               {busy ? <ActivityIndicator color={colors.text2} size="small" /> : <ArrowUp color={has ? accent.ink : colors.text3} size={20} strokeWidth={2.5} />}
             </Round>
           </Animated.View>
         ) : (
-          <Animated.View key="voice" entering={ZoomIn.duration(160)}>
+          <Animated.View key="voice" entering={FadeIn.duration(140)}>
             <Round label={L("Talk with Pyrius", "Parler avec Pyrius")} onPress={onVoice} light>
               <AudioLines color={colors.bg} size={20} strokeWidth={2} />
             </Round>
           </Animated.View>
         )}
       </View>
-    </Animated.View>
+    </View>
   );
 });
 

@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { AudioLines, FileText, RotateCcw } from "lucide-react-native";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { messageAttachments, type ChatMessage, type Chip as ChipT } from "@/lib/types";
 import { useStore } from "~/lib/store";
 import { colors, radii } from "~/lib/theme";
@@ -30,7 +30,7 @@ export function UploadList({ uploads, align = "flex-end" }: { uploads: NonNullab
 
 export function UserMessage({ m }: { m: ChatMessage }) {
   return (
-    <Animated.View entering={FadeInDown.springify().damping(22)} style={[s.userWrap, { gap: 8 }]}>
+    <Animated.View entering={FadeIn.duration(220)} style={[s.userWrap, { gap: 8 }]}>
       {m.uploads?.length ? <UploadList uploads={m.uploads} /> : null}
       {m.text ? (
         <View style={s.user}>
@@ -42,14 +42,29 @@ export function UserMessage({ m }: { m: ChatMessage }) {
   );
 }
 
-export function AssistantMessage({ m, conversationId, showChips, onChip }: { m: ChatMessage; conversationId: string; showChips: boolean; onChip: (c: ChipT) => void }) {
+export function AssistantMessage({
+  m,
+  conversationId,
+  showChips,
+  onChip,
+  outdated,
+  onSearchAgain,
+}: {
+  m: ChatMessage;
+  conversationId: string;
+  showChips: boolean;
+  onChip: (c: ChipT) => void;
+  /** These flight results are for an earlier version of the trip. */
+  outdated?: boolean;
+  onSearchAgain?: () => void;
+}) {
   const { L } = useStore();
   const attachments = messageAttachments(m);
   return (
     <Animated.View entering={FadeIn.duration(500)} style={{ gap: 14 }}>
       <T style={s.aiText} selectable>{m.text}</T>
       {attachments.map((a, i) => (
-        <AttachmentView key={`${a.type}-${i}`} a={a} conversationId={conversationId} />
+        <AttachmentView key={`${a.type}-${i}`} a={a} conversationId={conversationId} outdated={outdated} onSearchAgain={onSearchAgain} />
       ))}
       {m.sources?.length ? (
         <View style={{ gap: 6 }}>
@@ -62,7 +77,7 @@ export function AssistantMessage({ m, conversationId, showChips, onChip }: { m: 
         </View>
       ) : null}
       {showChips && m.chips?.length ? (
-        <Animated.View entering={FadeInDown.delay(250)} style={s.chips}>
+        <Animated.View entering={FadeIn.delay(150).duration(250)} style={s.chips}>
           {m.chips.map((c) => (
             <Chip key={c.label} label={c.label} onPress={() => onChip(c)} />
           ))}

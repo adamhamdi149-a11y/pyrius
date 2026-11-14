@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { ChevronLeft, RotateCcw, Shuffle, SlidersHorizontal } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DESTINATIONS } from "@/lib/explore/destinations";
 import { recommend } from "@/lib/explore/engine";
@@ -67,7 +67,7 @@ export default function Results() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 60, paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 22 }} showsVerticalScrollIndicator={false}>
         {!thinking ? (
           <>
-            <Animated.View entering={FadeInDown.duration(600)} style={{ gap: 12 }}>
+            <Animated.View entering={FadeIn.duration(600)} style={{ gap: 12 }}>
               <T weight="semibold" style={s.kicker}>{L("YOUR TRAVEL PERSONALITY", "VOTRE PERSONNALITÉ VOYAGE")}</T>
               <PersonalityName name={pick(ex.personality.name, lang)} size={42} />
               <T style={{ fontSize: 16, lineHeight: 24, color: colors.text2 }}>{pick(ex.personality.description, lang)}</T>
@@ -78,7 +78,7 @@ export default function Results() {
               </View>
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(150).duration(600)}>
+            <Animated.View entering={FadeIn.delay(150).duration(600)}>
               <T weight="semibold" style={{ fontSize: 20, letterSpacing: -0.3 }}>{seen.length ? L("More places you'll love", "D'autres lieux pour vous") : L("Destinations you'll love", "Des destinations pour vous")}</T>
             </Animated.View>
             {recs.map((r, i) => (

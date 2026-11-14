@@ -11,7 +11,9 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { DialogHost } from "~/components/Dialog";
 import { LaunchOverlay } from "~/components/LaunchOverlay";
+import { OverlayHost } from "~/components/Overlay";
 import { ToastHost } from "~/components/Toast";
 import { StoreProvider, useStore } from "~/lib/store";
 import { TripsProvider } from "~/lib/trips";
@@ -55,7 +57,7 @@ function Screens() {
         </Stack.Protected>
         <Stack.Protected guard={phase === "app"}>
           <Stack.Screen name="chat" options={{ animation: "fade", gestureEnabled: false }} />
-          <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+          <Stack.Screen name="voice" options={{ animation: "fade", gestureEnabled: false }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="saved" />
           <Stack.Screen name="tracking" />
@@ -84,6 +86,8 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <TripsProvider>
             <Screens />
+            <OverlayHost />
+            <DialogHost />
           </TripsProvider>
           <ToastHost />
         </StoreProvider>

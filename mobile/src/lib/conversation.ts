@@ -4,7 +4,7 @@ import { flightBrief } from "@/lib/flights/brief";
 import { hotelBrief, sortStays } from "@/lib/hotels/brief";
 import { offerTitle } from "@/lib/offers";
 import { newConversation } from "@/lib/store/defaults";
-import { messageAttachments, type AgentReply, type AgentStage, type AnyOffer, type Attachment, type ChatMessage, type ChipAction, type ClientAction, type Conversation, type TripPreferences } from "@/lib/types";
+import { messageAttachments, type AgentReply, type AgentStage, type AnyOffer, type Attachment, type ChatMessage, type ChipAction, type ClientAction, type Conversation, type FlightSearchParams, type FlightSnapshot, type TripPreferences } from "@/lib/types";
 import { money, toISODate, uid } from "@/lib/utils";
 import { toast } from "~/components/Toast";
 import { api } from "./api";
@@ -102,12 +102,12 @@ export function useConversationEngine() {
 
   /** The active conversation, or a fresh one with the composer's quick preferences. */
   const ensureConversation = useCallback(
-    (draftPrefs?: QuickPrefs) => {
+    (draftPrefs?: QuickPrefs, focus?: Conversation["focus"]) => {
       const existing = store.activeId ? store.getConversation(store.activeId) : undefined;
       if (existing) return existing;
       const fresh = newConversation(settings);
       const extra = Object.fromEntries(Object.entries(draftPrefs ?? {}).filter(([, v]) => v !== undefined));
-      const c: Conversation = { ...fresh, title: L("New trip", "Nouveau voyage"), prefs: { ...fresh.prefs, ...extra, askedPrefs: Object.values(extra).some(Boolean) || undefined } };
+      const c: Conversation = { ...fresh, focus, title: L("New trip", "Nouveau voyage"), prefs: { ...fresh.prefs, ...extra, askedPrefs: Object.values(extra).some(Boolean) || undefined } };
       store.upsertConversation(c);
       store.setActiveId(c.id);
       return c;
@@ -139,13 +139,19 @@ export function useConversationEngine() {
     [store],
   );
 
+  /** Saves a whole updated conversation (choices made with the flight controls). */
+  const save = useCallback((c: Conversation) => store.upsertConversation({ ...c, updatedAt: new Date().toISOString() }), [store]);
+
+  /** Live fares for each search of the plan (one, or one per multi-city flight). */
+  const searchFlights = useCallback((plan: FlightSearchParams[]) => Promise.all(plan.map((p) => api<FlightSnapshot>("/api/search/flights", p))), []);
+
   /** Sends a typed (or dictated) message, with any photos and files, to the concierge and appends its reply. */
   const ask = useCallback(
-    async (convId: string, text: string, action?: ChipAction, files?: PendingUpload[]) => {
+    async (convId: string, text: string, action?: ChipAction, files?: PendingUpload[], opts: { voice?: boolean } = {}) => {
       const c = store.getConversation(convId);
       if (!c) throw new Error("Conversation not found");
       const uploads = files?.length ? files.map((f) => ({ name: f.name, type: f.type, data: f.data })) : undefined;
-      const reply = await api<AgentReply>("/api/chat", { message: text, action, uploads, ...basePayload(c) });
+      const reply = await api<AgentReply>("/api/chat", { message: text, action, uploads, voice: opts.voice || undefined, ...basePayload(c) });
       const attachments = reply.attachments ?? (reply.attachment ? [reply.attachment] : undefined);
       const res = append(convId, { role: "assistant", text: reply.reply, chips: reply.chips, attachments, sources: reply.sources }, { prefs: reply.prefs, stage: reply.stage as AgentStage, title: reply.title ?? c.title });
       if (res) applyActions(reply.actions, res.conversation);
@@ -154,5 +160,5 @@ export function useConversationEngine() {
     [store, basePayload, append, applyActions],
   );
 
-  return { contextFor, basePayload, applyActions, ensureConversation, append, patch, ask };
+  return { contextFor, basePayload, applyActions, ensureConversation, append, patch, ask, save, searchFlights };
 }

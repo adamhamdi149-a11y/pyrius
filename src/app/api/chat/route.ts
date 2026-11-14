@@ -26,6 +26,8 @@ interface Body {
   counts?: { saved?: number; trackers?: number };
   /** Photos and files sent with the message (mobile app): { name, type, data (base64) }. */
   uploads?: unknown;
+  /** The message was spoken in a take-turns voice conversation: answer fast and short. */
+  voice?: unknown;
 }
 
 /** Quick-reply buttons with a structured action become a plain request for the AI. */
@@ -112,6 +114,7 @@ export async function POST(req: Request) {
       saved,
       plan: cleanPlan(body.plan),
       counts: cleanCounts(body.counts, saved),
+      voice: body.voice === true,
     });
     return NextResponse.json(reply);
   } catch (err) {

@@ -2,14 +2,14 @@ import { router } from "expo-router";
 import { ChevronLeft, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PERSONALITIES } from "@/lib/explore/engine";
 import { PersonalityName, pick, SaveButton, useLang } from "~/components/explore/parts";
 import { PlacePhoto } from "~/components/PlacePhoto";
 import { IconButton, OutlineButton, PrimaryButton, T, tap } from "~/components/ui";
 import { useExplore } from "~/lib/explore";
-import { placePhoto } from "~/lib/photos";
+import { prefetchPhotos } from "~/lib/photos";
 import { useStore } from "~/lib/store";
 import { colors, fonts, radii } from "~/lib/theme";
 
@@ -23,30 +23,30 @@ function Welcome({ onStart }: { onStart: () => void }) {
   const { height } = useWindowDimensions();
   const [i, setI] = useState(0);
   useEffect(() => {
-    BACKDROPS.forEach((t) => void placePhoto(t));
+    prefetchPhotos(BACKDROPS, "large");
     const id = setInterval(() => setI((x) => (x + 1) % BACKDROPS.length), 4200);
     return () => clearInterval(id);
   }, []);
   return (
     <View style={{ flex: 1 }}>
       <Animated.View key={BACKDROPS[i]} entering={FadeIn.duration(1100)} exiting={FadeOut.duration(1100)} style={StyleSheet.absoluteFill}>
-        <PlacePhoto title={BACKDROPS[i]} style={StyleSheet.absoluteFill} fade={0.96} credit={false} />
+        <PlacePhoto title={BACKDROPS[i]} size="large" style={StyleSheet.absoluteFill} fade={0.96} credit={false} />
       </Animated.View>
       <View style={[s.welcome, { paddingBottom: insets.bottom + 28, minHeight: height }]}>
-        <Animated.View entering={FadeInDown.delay(200).duration(700)} style={s.badge}>
+        <Animated.View entering={FadeIn.delay(200).duration(700)} style={s.badge}>
           <Sparkles color={colors.white} size={14} />
           <T weight="semibold" style={{ fontSize: 12, letterSpacing: 1.2, color: colors.white }}>PYRIUS EXPLORE</T>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(350).duration(800)}>
+        <Animated.View entering={FadeIn.delay(350).duration(800)}>
           <T style={s.title} accessibilityRole="header">
             {L("Discover your ", "Découvrez votre ")}
             <T style={s.serif}>{L("travel style.", "style de voyage.")}</T>
           </T>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(500).duration(800)}>
+        <Animated.View entering={FadeIn.delay(500).duration(800)}>
           <T style={s.sub}>{L("A few choices are all it takes for Pyrius to discover the destinations you'll love.", "Quelques choix suffisent pour que Pyrius découvre les destinations que vous allez adorer.")}</T>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(700).duration(800)} style={{ alignSelf: "stretch", gap: 10 }}>
+        <Animated.View entering={FadeIn.delay(700).duration(800)} style={{ alignSelf: "stretch", gap: 10 }}>
           <PrimaryButton label={L("Let's discover", "C'est parti")} onPress={onStart} />
           <T style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>{L("12 quick choices · about a minute", "12 choix rapides · environ une minute")}</T>
         </Animated.View>
@@ -91,7 +91,7 @@ export default function ExploreHome() {
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 64, paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 26 }} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(500)} style={s.card}>
+        <Animated.View entering={FadeIn.duration(500)} style={s.card}>
           <T weight="semibold" style={s.kicker}>{L("YOUR TRAVEL PERSONALITY", "VOTRE PERSONNALITÉ VOYAGE")}</T>
           <PersonalityName name={pick(personality.name, lang)} size={36} />
           <T style={{ fontSize: 15, lineHeight: 22, color: colors.text2 }}>{pick(personality.description, lang)}</T>
@@ -109,7 +109,7 @@ export default function ExploreHome() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
               {saved.map((d) => (
                 <Pressable key={d.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/explore/[id]", params: { id: d.id } })}>
-                  <PlacePhoto title={d.photo} style={s.mini} credit={false}>
+                  <PlacePhoto title={d.photo} size="small" style={s.mini} credit={false}>
                     <View style={{ position: "absolute", top: 8, right: 8 }}>
                       <SaveButton saved onPress={() => ex.toggleSaved(d.id)} light />
                     </View>
