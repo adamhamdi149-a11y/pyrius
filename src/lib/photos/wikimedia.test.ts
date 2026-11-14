@@ -24,5 +24,6 @@ describe("photo proxy inputs", () => {
     expect(await photoBytes("https://example.com/a.jpg")).toBeNull();
     expect(await photoBytes("http://upload.wikimedia.org/a.jpg")).toBeNull();
     expect(await photoBytes("not a url")).toBeNull();
+    expect(await photoBytes("https://thumb.wikimedia.org.evil.example/a.jpg")).toBeNull();
   });
 });

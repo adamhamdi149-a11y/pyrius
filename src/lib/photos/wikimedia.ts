@@ -66,8 +66,10 @@ export async function photoUrl(title: string, width: PhotoWidth): Promise<string
 }
 
 const MAX_BYTES = 6 * 1024 * 1024;
+/** Wikimedia's image servers (thumbnails moved from upload. to thumb.). */
+const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org"]);
 
-/** The photo's bytes, or null for an address that isn't Wikimedia's image host. Throws PhotoUnavailable. */
+/** The photo's bytes, or null for an address that isn't one of Wikimedia's image hosts. Throws PhotoUnavailable. */
 export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type: string } | null> {
   let u: URL;
   try {
@@ -75,7 +77,7 @@ export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type
   } catch {
     return null;
   }
-  if (u.protocol !== "https:" || u.hostname !== "upload.wikimedia.org") return null;
+  if (u.protocol !== "https:" || !IMAGE_HOSTS.has(u.hostname)) return null;
   const r = await fetch(u, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).catch((e: Error) => {
     throw new PhotoUnavailable(`download: ${e.message}`);
   });
