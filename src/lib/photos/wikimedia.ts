@@ -26,7 +26,11 @@ export const cleanTitle = (v: unknown) => {
 };
 
 async function json<T>(url: string): Promise<T | null> {
-  const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(6000) }).catch(() => null);
+  const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(6000) }).catch((e: Error) => {
+    console.error("photo lookup failed", new URL(url).hostname, e.message);
+    return null;
+  });
+  if (r && !r.ok) console.error("photo lookup refused", new URL(url).hostname, r.status);
   if (!r?.ok) return null;
   return (await r.json().catch(() => null)) as T | null;
 }
@@ -70,7 +74,10 @@ export async function photoBytes(url: string): Promise<{ body: ArrayBuffer; type
   if (u.protocol !== "https:" || u.hostname !== "upload.wikimedia.org") return null;
   const r = await fetch(u, { headers: HEADERS, signal: AbortSignal.timeout(8000) }).catch(() => null);
   const type = r?.headers.get("content-type") ?? "";
-  if (!r?.ok || !/^image\/(jpeg|png|webp)/.test(type)) return null;
+  if (!r?.ok || !/^image\/(jpeg|png|webp)/.test(type)) {
+    console.error("photo download refused", r?.status ?? "network", type);
+    return null;
+  }
   const body = await r.arrayBuffer().catch(() => null);
   return body && body.byteLength <= MAX_BYTES ? { body, type } : null;
 }

@@ -26,6 +26,7 @@ export async function GET(req: Request) {
   if (!ok.ok) return NextResponse.json({ error: "Too many requests." }, { status: 429, headers: { "Retry-After": String(ok.retryAfter) } });
 
   const url = await photoUrl(title, cleanWidth(q.get("w"))).catch(() => null);
+  if (!url) console.error("no photo found for", title);
   const img = url ? await photoBytes(url) : null;
   if (!img) return NextResponse.json({ error: "No photo for this place." }, { status: 404, headers: { "Cache-Control": MISS } });
   return new Response(img.body, { headers: { "Content-Type": img.type, "Cache-Control": HIT, "X-Photo-Source": "Wikimedia Commons" } });
