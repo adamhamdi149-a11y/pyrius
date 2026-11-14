@@ -136,7 +136,7 @@ function RouteBanner({ a, count }: { a: Extract<Attachment, { type: "flights" }>
   const to = findAirport(p.destinationCode);
   const from = findAirport(p.originCode);
   return (
-    <PlacePhoto title={to?.city} style={s.banner} fade={0.9} size="small" credit={false}>
+    <PlacePhoto title={to?.city} code={p.destinationCode} style={s.banner} fade={0.9} size="small" credit={false}>
       <View style={{ flex: 1 }} />
       <View style={{ padding: 16, gap: 2 }}>
         {a.leg ? <T style={s.bannerKicker}>{L(`FLIGHT ${a.leg.index + 1} OF ${a.leg.count}`, `VOL ${a.leg.index + 1} SUR ${a.leg.count}`)}</T> : null}

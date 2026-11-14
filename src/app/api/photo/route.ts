@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { allow } from "@/lib/ai/concierge/rateLimit";
+import { curatedPhoto } from "@/lib/photos/curated";
 import { pexelsPhoto } from "@/lib/photos/pexels";
+import { pixabayPhoto } from "@/lib/photos/pixabay";
 import { unsplashPhoto } from "@/lib/photos/unsplash";
 import { cleanTitle, cleanWidth, photoBytes, photoUrl } from "@/lib/photos/wikimedia";
 
@@ -14,8 +16,9 @@ const MISS = "public, max-age=3600, s-maxage=86400";
 
 /**
  * A photo of a place, served or redirected by Pyrius and cached at the edge: GET /api/photo?title=Maldives&w=960
- * (&o=portrait for tall cards, &meta=1 for the photographer's credit as JSON). Travel
- * photography (Unsplash, then Pexels) first, then the place's Wikipedia photo (never a flag or a map).
+ * (&code=LIS to use an airport's city, &o=portrait for tall cards, &meta=1 for the credit as JSON).
+ * Order: the website's hand-picked photos, then Unsplash, Pixabay or Pexels (whichever has a key),
+ * then the place's Wikipedia photo (never a flag or a map).
  */
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
@@ -33,14 +36,23 @@ export async function GET(req: Request) {
   let img: Awaited<ReturnType<typeof photoBytes>> = null;
   let credit = "Wikimedia Commons";
   try {
-    // Unsplash first: its images load from its own CDN, as its guidelines ask.
+    // The website's own hand-picked photo for this place, when it has one.
+    const code = q.get("code")?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null;
+    const picked = curatedPhoto(title, code, width);
+    if (picked) {
+      if (q.get("meta") === "1") return NextResponse.json({ credit: "Unsplash" }, { headers: { "Cache-Control": HIT } });
+      return new Response(null, { status: 302, headers: { Location: picked, "Cache-Control": HIT } });
+    }
+    // Unsplash (with a key): its images load from its own CDN, as its guidelines ask.
     const best = await unsplashPhoto(title, width, orientation).catch((e) => (console.error("unsplash", (e as Error).message), null));
     if (best) {
       if (q.get("meta") === "1") return NextResponse.json({ credit: best.credit }, { headers: { "Cache-Control": HIT } });
       return new Response(null, { status: 302, headers: { Location: best.url, "Cache-Control": HIT } });
     }
-    // Then Pexels, then Wikipedia's own photo.
-    const pro = await pexelsPhoto(title, width, orientation).catch((e) => (console.error("pexels", (e as Error).message), null));
+    // Then Pixabay, Pexels, and finally Wikipedia's own photo.
+    const pro =
+      (await pixabayPhoto(title, width, orientation).catch((e) => (console.error("pixabay", (e as Error).message), null))) ??
+      (await pexelsPhoto(title, width, orientation).catch((e) => (console.error("pexels", (e as Error).message), null)));
     if (pro) {
       img = await photoBytes(pro.url);
       credit = pro.credit;

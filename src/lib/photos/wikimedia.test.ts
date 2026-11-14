@@ -27,3 +27,15 @@ describe("photo proxy inputs", () => {
     expect(await photoBytes("https://thumb.wikimedia.org.evil.example/a.jpg")).toBeNull();
   });
 });
+
+import { curatedPhoto } from "./curated";
+describe("the website's own photos", () => {
+  it("are used for known places and airports", () => {
+    expect(curatedPhoto("Maldives", null, 960)).toMatch(/^https:\/\/images\.unsplash\.com\/photo-[\w-]+\?w=960/);
+    expect(curatedPhoto("Lisbon", "LIS", 500)).toMatch(/w=500/);
+    expect(curatedPhoto("Osaka", "KIX", 500)).toMatch(/unsplash/);
+    expect(curatedPhoto("Dolomites", "VCE", 960)).toBeNull();
+    expect(curatedPhoto("Zermatt", null, 960)).toBeNull();
+    expect(curatedPhoto("Somewhere", "XYZ", 960)).toBeNull();
+  });
+});

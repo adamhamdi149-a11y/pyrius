@@ -44,7 +44,7 @@ export function TripCard({ trip, index, onPress }: { trip: Trip; index: number; 
         }}
         style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
       >
-        <PlacePhoto title={tripPhoto(trip)} style={s.card}>
+        <PlacePhoto title={tripPhoto(trip)} code={trip.destinationCode} style={s.card}>
           <View style={s.top}>
             <StatusPill status={status} />
           </View>
