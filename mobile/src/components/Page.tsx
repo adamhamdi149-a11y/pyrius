@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "~/lib/store";
-import { colors, radii } from "~/lib/theme";
+import { colors, fonts, radii } from "~/lib/theme";
 import { IconButton, T } from "./ui";
 
 /** A plain secondary screen: back button, title, scrolling content. */
@@ -42,7 +42,7 @@ export const Divider = () => <View style={{ height: 1, backgroundColor: colors.b
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   head: { height: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16 },
-  section: { fontSize: 13, color: colors.text3, paddingHorizontal: 4 },
+  section: { fontFamily: fonts.medium, fontSize: 12, letterSpacing: 1.1, textTransform: "uppercase", color: colors.text3, paddingHorizontal: 4 },
   group: { borderRadius: radii.xl, backgroundColor: colors.bg2, borderWidth: 1, borderColor: colors.borderSoft, overflow: "hidden" },
   footer: { fontSize: 12, lineHeight: 17, color: colors.text3, paddingHorizontal: 4 },
 });
