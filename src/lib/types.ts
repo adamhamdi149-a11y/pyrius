@@ -362,6 +362,20 @@ export interface ChatMessage {
   attachments?: Attachment[];
   /** Web pages the AI consulted for this reply. */
   sources?: WebSource[];
+  /** Said out loud in a voice conversation (transcript), rather than typed. */
+  via?: "voice";
+  /** Photos and files the user sent with this message (mobile app). */
+  uploads?: MessageUpload[];
+}
+
+export type UploadKind = "image" | "pdf" | "text";
+
+/** A photo or file sent with a message. The contents went to the AI with that message only; this is what the chat shows. */
+export interface MessageUpload {
+  name: string;
+  kind: UploadKind;
+  /** Local file on the device that sent it (thumbnail). Missing or unreadable on other devices. */
+  uri?: string;
 }
 
 export interface WebSource {
@@ -393,6 +407,8 @@ export interface Conversation {
   messages: ChatMessage[];
   prefs: TripPreferences;
   stage: AgentStage;
+  /** What the conversation started out to find (mobile app's welcome choices). Flight controls show only for flights. */
+  focus?: "flights" | "hotels" | "cars";
 }
 
 export interface AgentReply {
@@ -421,6 +437,32 @@ export interface UserSettings {
   defaultChildren: number;
   travelStyle: { nonstop: boolean; carryOnOnly: boolean; flexibleDates: boolean };
   notifications: { email: boolean; priceAlerts: boolean; savedSearches: boolean; productNews: boolean };
+  /** Voice conversation settings (mobile app). */
+  voice?: VoiceSettings;
+  /** Pyrius Explore: the travel-style answers, past results and saved destinations (mobile app). */
+  explore?: ExploreState;
+}
+
+export interface ExploreState {
+  /** Question id → option id, or "skip". */
+  answers: Record<string, string>;
+  /** Finished discoveries, newest first: the personality and the destinations it recommended. */
+  history?: { personality: string; destinations: string[]; at: string }[];
+  /** Destination ids the user saved, newest first. Kept when they start over. */
+  saved?: string[];
+}
+
+export interface VoiceSettings {
+  /** Voice conversations are offered in the app. */
+  enabled: boolean;
+  /** One of the voices the server accepts (lib/ai/voice). Used for English, and for French when voiceFr isn't set. */
+  voice: string;
+  /** The voice Pyrius uses when speaking French (mobile app). */
+  voiceFr?: string;
+  /** Pyrius answers out loud in voice mode; off means it answers in text while you speak. */
+  spoken: boolean;
+  /** Hide the microphone and voice buttons everywhere. */
+  textOnly: boolean;
 }
 
 export type BillingInterval = "month" | "year";

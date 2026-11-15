@@ -128,3 +128,9 @@ export function nearestAirports(lat: number, lon: number, limit = 4, maxKm = 250
     .sort((x, y) => x.km - y.km)
     .slice(0, limit);
 }
+
+/** The single closest airport with scheduled flights, for setting a home airport from the user's location. */
+export function nearestAirport(lat: number, lon: number) {
+  const hit = nearestAirports(lat, lon, 1, 1500)[0];
+  return hit ? { ...hit.a, km: hit.km } : undefined;
+}

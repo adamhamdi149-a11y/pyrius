@@ -1,8 +1,7 @@
 import { placeName } from "@/lib/data/world";
-import { tripKind, type FlightStep } from "@/lib/flights/workflow";
+import { CABIN_LABEL, CABIN_LABEL_FR, travelersOf, tripKind, type FlightStep } from "@/lib/flights/workflow";
 import type { FlightSearchParams, FlightSnapshot, TripPreferences } from "@/lib/types";
-import { formatRange, money } from "@/lib/utils";
-import { shortDate } from "./Calendar";
+import { formatRange, money, shortDate } from "@/lib/utils";
 
 /**
  * What Pyrius says when the user moves the trip forward with a control. Written from the trip
@@ -72,3 +71,15 @@ export function resultsMessage(plan: FlightSearchParams[], snaps: FlightSnapshot
     `Voici ${n === 1 ? "1 tarif" : `${n} tarifs`} en direct pour ${route}, ${formatRange(p.departDate, p.returnDate, "fr")}. Le plus bas : ${money(best.totalPrice, best.currency, "fr")} avec ${best.airline.name}${p.returnDate ? " pour l'aller-retour" : ""}.`,
   );
 }
+
+/** "2 adults, 1 child" / "2 adultes, 1 enfant". */
+export function travelersText(t: TripPreferences, locale: Loc) {
+  const fr = locale === "fr";
+  const p = travelersOf(t);
+  const parts = [fr ? `${p.adults} adulte${p.adults > 1 ? "s" : ""}` : `${p.adults} adult${p.adults > 1 ? "s" : ""}`];
+  if (p.children) parts.push(fr ? `${p.children} enfant${p.children > 1 ? "s" : ""}` : `${p.children} child${p.children > 1 ? "ren" : ""}`);
+  if (p.infants) parts.push(fr ? `${p.infants} bébé${p.infants > 1 ? "s" : ""}` : `${p.infants} infant${p.infants > 1 ? "s" : ""}`);
+  return parts.join(", ");
+}
+
+export const cabinText = (t: TripPreferences, locale: Loc) => (locale === "fr" ? CABIN_LABEL_FR : CABIN_LABEL)[t.cabin ?? "economy"];

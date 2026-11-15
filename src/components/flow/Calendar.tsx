@@ -169,9 +169,6 @@ export function Calendar({ mode, start, end, min, max, picking, onChange, month,
 }
 
 /** "Thu, Dec 12" in the user's language. */
-export function shortDate(iso: string | undefined, locale: "en" | "fr") {
-  if (!iso) return "";
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString(locale === "fr" ? "fr-CA" : "en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-}
+export { shortDate } from "@/lib/utils";
 
 export { addMonths as addCalendarMonths };

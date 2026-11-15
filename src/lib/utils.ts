@@ -73,13 +73,25 @@ export function formatDuration(min: number) {
   return m ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`;
 }
 
+type Unit = "second" | "minute" | "hour" | "day";
+
+/** "5 minutes ago" without Intl.RelativeTimeFormat, which the phone's JavaScript engine (Hermes) lacks. */
+function plainAgo(n: number, unit: Unit, locale: string) {
+  const fr = locale.startsWith("fr");
+  const words: Record<Unit, [string, string]> = fr
+    ? { second: ["seconde", "secondes"], minute: ["minute", "minutes"], hour: ["heure", "heures"], day: ["jour", "jours"] }
+    : { second: ["second", "seconds"], minute: ["minute", "minutes"], hour: ["hour", "hours"], day: ["day", "days"] };
+  if (unit === "day" && n === 1) return fr ? "hier" : "yesterday";
+  const w = words[unit][n === 1 ? 0 : 1];
+  return fr ? `il y a ${n} ${w}` : `${n} ${w} ago`;
+}
+
 export function timeAgo(iso: string, locale = "en") {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  if (diff < 60) return rtf.format(-Math.max(1, Math.round(diff)), "second");
-  if (diff < 3600) return rtf.format(-Math.round(diff / 60), "minute");
-  if (diff < 86400) return rtf.format(-Math.round(diff / 3600), "hour");
-  return rtf.format(-Math.round(diff / 86400), "day");
+  const [n, unit]: [number, Unit] =
+    diff < 60 ? [Math.max(1, Math.round(diff)), "second"] : diff < 3600 ? [Math.round(diff / 60), "minute"] : diff < 86400 ? [Math.round(diff / 3600), "hour"] : [Math.round(diff / 86400), "day"];
+  if (typeof Intl === "undefined" || typeof Intl.RelativeTimeFormat !== "function") return plainAgo(n, unit, locale);
+  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(-n, unit);
 }
 
 // ---------- Money ----------
@@ -114,4 +126,10 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** "Fri, Mar 14" / "ven. 14 mars": a day of the trip, with its weekday. */
+export function shortDate(iso: string | undefined, locale: "en" | "fr") {
+  if (!iso) return "";
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString(locale === "fr" ? "fr-CA" : "en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }

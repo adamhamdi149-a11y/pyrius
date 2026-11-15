@@ -4,8 +4,10 @@ import { nextStep, resultsMatch } from "@/lib/flights/workflow";
 import type { HotelBrief } from "@/lib/hotels/brief";
 import { flightMode, getProviders } from "@/lib/providers";
 import type { AgentReply, AgentStage, Attachment, Chip, DataSource, FlightSearchParams, HotelSearchParams, PlanId, TripPreferences, WebSource } from "@/lib/types";
-import { contextMessage, INSTRUCTIONS, REPLY_FORMAT } from "./prompt";
+import { VOICE_STYLE } from "@/lib/ai/voice";
+import { contextMessage, CORE_INSTRUCTIONS, INSTRUCTIONS, REPLY_FORMAT } from "./prompt";
 import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
+import { userContent, type CleanUpload } from "./uploads";
 
 /**
  * The AI concierge. OpenAI reads the conversation and decides what to do; every action
@@ -15,6 +17,8 @@ import { runTool, TOOLS, type SavedSummary, type TurnState } from "./tools";
 
 export interface ConciergeRequest {
   message: string;
+  /** Photos and files sent with this message, checked by cleanUploads. */
+  uploads?: CleanUpload[];
   history: { role: "user" | "assistant"; content: string }[];
   trip: TripPreferences;
   stage: AgentStage;
@@ -30,6 +34,8 @@ export interface ConciergeRequest {
   saved: SavedSummary[];
   plan: PlanId;
   counts: { saved: number; trackers: number };
+  /** Spoken conversation (take-turns voice): answered for speed, short and without web search. */
+  voice?: boolean;
 }
 
 export class ConciergeError extends Error {
@@ -40,6 +46,13 @@ export class ConciergeError extends Error {
 
 const MODEL = () => process.env.OPENAI_MODEL || "gpt-5.4-mini";
 const EFFORT = () => process.env.OPENAI_REASONING || "low";
+// Spoken replies have to come back in about the time a person takes to answer: no extra reasoning.
+const VOICE_EFFORT = () => process.env.OPENAI_VOICE_REASONING || "none";
+/** Efforts the configured model turned down; the call is retried at "low" and they aren't sent again. */
+const refusedEfforts = new Set<string>();
+
+// Take-turns voice: the core rules with the spoken style; the reply still comes back in the JSON format.
+const VOICE_INSTRUCTIONS = `${CORE_INSTRUCTIONS}\n\n${VOICE_STYLE}\n\n# Reply format\nPut what you say in "reply" as plain spoken sentences, and leave "suggestions" empty.`;
 const reasoningModel = () => /^(gpt-5|o\d)/.test(MODEL());
 const MAX_ROUNDS = 6;
 const CALL_TIMEOUT_MS = 30_000;
@@ -51,11 +64,13 @@ const WEB_SEARCH = { type: "web_search", search_context_size: "low", user_locati
 type Annotation = { type: string; url?: string; title?: string };
 type OutputItem = { type: string; call_id?: string; name?: string; arguments?: string; content?: { type: string; text?: string; annotations?: Annotation[] }[] };
 
-async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadline: number }) {
+async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadline: number; voice?: boolean }): Promise<{ status: string; output: OutputItem[] }> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new ConciergeError("unavailable", "OpenAI is not configured");
   const left = opts.deadline - Date.now();
   if (left < 3000) throw new ConciergeError("timeout", "Turn took too long");
+  const wanted = opts.voice ? VOICE_EFFORT() : EFFORT();
+  const effort = refusedEfforts.has(wanted) ? "low" : wanted;
   let res: Response;
   try {
     res = await fetch("https://api.openai.com/v1/responses", {
@@ -64,17 +79,17 @@ async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadl
       signal: AbortSignal.timeout(Math.min(CALL_TIMEOUT_MS, left)),
       body: JSON.stringify({
         model: MODEL(),
-        instructions: INSTRUCTIONS,
+        instructions: opts.voice ? VOICE_INSTRUCTIONS : INSTRUCTIONS,
         input,
-        tools: [...TOOLS, WEB_SEARCH],
+        tools: opts.voice ? TOOLS : [...TOOLS, WEB_SEARCH],
         tool_choice: opts.forceAnswer ? "none" : "auto",
         parallel_tool_calls: true,
         // At most two web searches per step keeps answers quick and the cost bounded.
-        max_tool_calls: 2,
+        ...(opts.voice ? {} : { max_tool_calls: 2 }),
         // Older chat models (gpt-4o, gpt-4.1) don't take a reasoning setting.
-        ...(reasoningModel() ? { reasoning: { effort: EFFORT() } } : {}),
+        ...(reasoningModel() ? { reasoning: { effort } } : {}),
         text: { format: REPLY_FORMAT },
-        max_output_tokens: 2500,
+        max_output_tokens: opts.voice ? 1200 : 2500,
         // Nothing is stored on OpenAI's side for later retrieval; reasoning is passed back encrypted.
         store: false,
         include: reasoningModel() ? ["reasoning.encrypted_content"] : [],
@@ -88,6 +103,10 @@ async function callOpenAI(input: unknown[], opts: { forceAnswer?: boolean; deadl
   if (!res.ok) {
     // Log the status and OpenAI's error message only, never the conversation.
     const detail = await res.json().then((j) => j?.error?.message as string | undefined).catch(() => undefined);
+    if (res.status === 400 && effort !== "low" && /reasoning|effort/i.test(detail ?? "")) {
+      refusedEfforts.add(effort);
+      return callOpenAI(input, opts);
+    }
     console.error("OpenAI responses error", res.status, detail?.slice(0, 300) ?? "");
     throw new ConciergeError("unavailable", `OpenAI ${res.status}`);
   }
@@ -164,8 +183,8 @@ async function restoreShown(r: ConciergeRequest["results"]) {
   return { ...r, flights: { ...r.flights, source: "demo" as const, shown: sorted.slice(0, 12).map((o, i) => flightBrief(o, i + 1)) } };
 }
 
-export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
-  const deadline = Date.now() + TURN_BUDGET_MS;
+/** The tools' working state for one turn, from the conversation the app sent. Text and voice both start here. */
+export async function turnStateFor(req: Pick<ConciergeRequest, "trip" | "today" | "locale" | "results" | "saved" | "plan" | "counts">) {
   const results = await restoreShown(req.results).catch(() => req.results);
   const state: TurnState = {
     trip: { ...req.trip, currency: req.trip.currency ?? "CAD" },
@@ -180,7 +199,11 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     actions: [],
     toolCalls: 0,
   };
+  return { state, results };
+}
 
+/** The per-turn facts the model gets: date, settings, the trip so far and the result cards on screen. */
+export async function turnContext(req: Pick<ConciergeRequest, "today" | "locale" | "homeAirport" | "stage" | "saved">, state: TurnState, results: ConciergeRequest["results"]) {
   const shown = shownResults(results);
   const context = contextMessage({
     today: req.today,
@@ -192,16 +215,23 @@ export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
     flightMode: flightMode(),
     hasResults: Boolean(results.flights?.shown.length && resultsMatch(state.trip, [results.flights.params], req.today)),
   });
+  return shown ? `${context}\n${shown}` : context;
+}
+
+export async function runConcierge(req: ConciergeRequest): Promise<AgentReply> {
+  const deadline = Date.now() + TURN_BUDGET_MS;
+  const { state, results } = await turnStateFor(req);
+  const context = await turnContext(req, state, results);
 
   const input: unknown[] = [
-    { role: "developer", content: shown ? `${context}\n${shown}` : context },
+    { role: "developer", content: context },
     ...req.history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: req.message },
+    { role: "user", content: userContent(req.message, req.uploads ?? []) },
   ];
 
   let final: ReturnType<typeof finalText> = null;
   for (let round = 0; round < MAX_ROUNDS && !final; round++) {
-    const res = await callOpenAI(input, { deadline, forceAnswer: round === MAX_ROUNDS - 1 });
+    const res = await callOpenAI(input, { deadline, forceAnswer: round === MAX_ROUNDS - 1, voice: req.voice });
     input.push(...res.output);
     const calls = res.output.filter((o) => o.type === "function_call");
     if (!calls.length) {

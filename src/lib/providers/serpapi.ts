@@ -139,9 +139,11 @@ async function call(params: Record<string, string>, engine = "google_flights", p
   if (res.status === 429 || msg.includes("run out of searches") || msg.includes("rate limit") || msg.includes("throughput")) throw new ProviderError("quota", provider, body.error);
   // Google simply had nothing for this query: that's an empty result, not a failure.
   if (msg.includes("hasn't returned any results") || msg.includes("no results")) return {};
+  // Google's "today" can already be tomorrow somewhere on the route: a clear answer, not a vague failure.
+  if (msg.includes("in the past")) throw new ProviderError("past_date", provider, body.error);
   if (msg.includes("expired") || msg.includes("invalid token") || msg.includes("booking_token") || msg.includes("departure_token")) throw new ProviderError("expired", provider, body.error);
   if (!res.ok || body.error) {
-    console.error("SerpApi error", res.status, body.error?.slice(0, 200));
+    console.error("SerpApi error", res.status, body.error?.slice(0, 200), params.outbound_date ?? "", params.return_date ?? "");
     throw new ProviderError(res.status === 400 ? "bad_request" : "unavailable", provider, body.error);
   }
   return body;

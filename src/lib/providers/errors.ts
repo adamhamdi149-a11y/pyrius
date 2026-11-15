@@ -6,6 +6,7 @@ export type ProviderErrorCode =
   | "timeout"
   | "expired" // a booking token or offer is no longer valid
   | "bad_request"
+  | "past_date" // Google Flights no longer sells that departure date
   | "unavailable";
 
 export class ProviderError extends Error {
@@ -25,6 +26,7 @@ export const PROVIDER_MESSAGES: Record<ProviderErrorCode, string> = {
   timeout: "The search took too long to answer. Please try again.",
   expired: "This offer has expired. Search again for current prices.",
   bad_request: "The search couldn't run with these details.",
+  past_date: "Google Flights no longer sells flights for that departure date. Choose a later date.",
   unavailable: "The travel data provider didn't respond. Please try again.",
 };
 
@@ -35,5 +37,6 @@ export const PROVIDER_STATUS: Record<ProviderErrorCode, number> = {
   timeout: 504,
   expired: 410,
   bad_request: 400,
+  past_date: 400,
   unavailable: 502,
 };
