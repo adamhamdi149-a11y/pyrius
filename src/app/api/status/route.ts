@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { flightMode } from "@/lib/providers";
+import { duffelEnabled, duffelTestMode } from "@/lib/providers/duffel";
 
 // Reports which integrations are configured. Never returns secret values.
 export function GET() {
@@ -9,5 +10,7 @@ export function GET() {
     stripe: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_PLUS),
     // "live" (Google Flights), "demo" (explicit demo mode) or "none" (not connected).
     flights: flightMode(),
+    // Flights Pyrius sells itself (Duffel fares, paid with Stripe): "test", "live" or false.
+    inAppFlights: duffelEnabled() && Boolean(process.env.STRIPE_SECRET_KEY) ? (duffelTestMode() ? "test" : "live") : false,
   });
 }

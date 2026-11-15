@@ -1592,3 +1592,157 @@
     justify-content: center;
   }
 }
+
+/* ---------- Booking inside Pyrius (Duffel fares, Stripe payment) ---------- */
+
+.ib {
+  display: grid;
+  gap: 10px;
+}
+
+.ib .bk__label .badge {
+  margin-left: 8px;
+}
+
+.ib__muted {
+  font-weight: 450;
+  color: var(--text-3);
+}
+
+.ib__fare .bk__main span + span {
+  margin-top: 1px;
+}
+
+.ib__or {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.ib__sellers {
+  justify-self: start;
+}
+
+.ib__form {
+  display: grid;
+  gap: 14px;
+}
+
+.ib__form .bk__change svg {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+}
+
+.ib__facts {
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.ib__facts svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  color: var(--text-3);
+}
+
+.ib__person {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+
+.ib__person--bad {
+  border-color: var(--error);
+}
+
+.ib__person legend {
+  padding: 0 6px;
+  margin-left: -6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.ib__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ib__pay {
+  width: 100%;
+  height: 44px;
+}
+
+.ib__pay svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 520px) {
+  .ib__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Confirmation after payment */
+.bconf-page {
+  max-width: 640px;
+}
+
+.bconf {
+  display: grid;
+  gap: 16px;
+  justify-items: stretch;
+}
+
+.bconf > .btn {
+  justify-self: start;
+}
+
+.bconf__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bconf__ok {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  color: var(--success);
+}
+
+.bconf__warn svg {
+  width: 32px;
+  height: 32px;
+  color: var(--warning);
+}
+
+.bconf__ref {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.bconf__ref b {
+  font-size: 28px;
+  letter-spacing: 0.08em;
+}
+
+.bconf__total {
+  color: var(--text-2);
+}
+
+.ib__form .bk__trip {
+  position: relative;
+}

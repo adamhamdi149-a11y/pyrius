@@ -15,6 +15,7 @@ import { offerTitle } from "@/components/results/OfferActions";
 import { flightBrief } from "@/lib/flights/brief";
 import { hotelBrief, sortStays } from "@/lib/hotels/brief";
 import { authHeaders } from "@/lib/authHeaders";
+import { loadStatus } from "@/lib/appStatus";
 import { useToast } from "@/components/ui/Toast";
 import { carsQuestion, staysQuestion } from "@/lib/ai/followups";
 import { findAirport, placeName } from "@/lib/data/world";
@@ -51,7 +52,6 @@ const EXAMPLES = {
   fr: ["Un endroit chaud en février, moins de 800 $…", "Tokyo à deux au printemps…", "Un long week-end à Lisbonne depuis Toronto…", "Paris du 10 au 17 mars, vol direct…"],
 };
 
-let statusCache: Promise<{ ai: string; flights?: "live" | "demo" | "none" }> | null = null;
 
 function OrbitBackdrop({ leaving }: { leaving: boolean }) {
   return (
@@ -107,8 +107,7 @@ export function Assistant() {
   const L = (en: string, fr: string) => (settings.locale === "fr" ? fr : en);
 
   useEffect(() => {
-    statusCache ??= fetch("/api/status").then((r) => r.json());
-    statusCache
+    loadStatus()
       .then((s) => {
         setEngine(s.ai === "openai" ? "openai" : "demo");
         setFlightMode(s.flights ?? null);

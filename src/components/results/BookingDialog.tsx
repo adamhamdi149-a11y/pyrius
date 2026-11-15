@@ -3,11 +3,13 @@ import { ArrowRight, Check, ExternalLink, Phone, RotateCcw } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Skeleton } from "@/components/ui/primitives";
+import { statusNow, useAppStatus } from "@/lib/appStatus";
 import { authHeaders } from "@/lib/authHeaders";
 import { findAirport } from "@/lib/data/world";
 import type { BookingChoice, BookingOption } from "@/lib/providers/serpapi";
 import type { Currency, FlightOffer, FlightSegment } from "@/lib/types";
 import { formatDate, formatDuration, formatTime, money, parseDate } from "@/lib/utils";
+import { InAppBooking } from "./InAppBooking";
 
 type Ready = { choices: BookingChoice[]; returnFlight?: FlightOffer; returns?: FlightOffer[]; changed?: boolean };
 type Failure = { message: string; code?: string };
@@ -58,8 +60,9 @@ export function openHoldingTab(title: string, note: string, wait = "This usually
   return w;
 }
 
+/** No tab when Pyrius can book the flight itself: the user chooses in the dialog first. */
 export const openBookingTab = (offer: FlightOffer) =>
-  openHoldingTab(routeOf(offer), offer.returnPending ? "Finding the cheapest return flight and the best seller…" : "Finding the best seller for this flight…");
+  statusNow()?.inAppFlights ? null : openHoldingTab(routeOf(offer), offer.returnPending ? "Finding the cheapest return flight and the best seller…" : "Finding the best seller for this flight…");
 
 /** Google's booking redirect takes a form POST; it opens the seller's page for this exact itinerary. */
 function sendToSeller(req: BookRequest, tab?: Window | null) {
@@ -103,6 +106,7 @@ export function BookingDialog({ offer, open, onClose, onExpired, tab }: { offer:
   const started = useRef(false);
   const pending = useRef<Window | null>(null);
   const ref = offer.booking;
+  const inApp = useAppStatus()?.inAppFlights || false;
 
   const closeTab = () => {
     if (pending.current && !pending.current.closed) pending.current.close();
@@ -141,17 +145,23 @@ export function BookingDialog({ offer, open, onClose, onExpired, tab }: { offer:
     [ref],
   );
 
-  useEffect(() => {
-    if (!open || !ref || started.current) return;
-    started.current = true;
-    pending.current = tab ?? null;
+  const findSellers = useCallback(() => {
+    if (!ref) return;
     if (offer.returnPending && ref.departureToken) lookup("trip", ref.departureToken);
     else if (ref.bookingToken) lookup("options", ref.bookingToken);
     else {
       closeTab();
       setFail({ message: "This offer can't be booked from Pyrius. Search again for current options.", code: "expired" });
     }
-  }, [open, ref, tab, offer.returnPending, lookup]);
+  }, [ref, offer.returnPending, lookup]);
+
+  useEffect(() => {
+    if (!open || !ref || started.current) return;
+    started.current = true;
+    pending.current = tab ?? null;
+    // When Pyrius can book it, sellers are looked up only if the user asks (each lookup uses search quota).
+    if (!statusNow()?.inAppFlights) findSellers();
+  }, [open, ref, tab, findSellers]);
 
   useEffect(() => {
     if (open) return;
@@ -183,9 +193,22 @@ export function BookingDialog({ offer, open, onClose, onExpired, tab }: { offer:
       open={open}
       onClose={onClose}
       title={`Book ${routeOf(offer)}`}
-      description={sentTo ? `${sentTo}'s booking page opened in a new tab with this trip.` : "Pyrius picks the lowest price and the seller. You finish on their site."}
+      description={
+        sentTo
+          ? `${sentTo}'s booking page opened in a new tab with this trip.`
+          : inApp
+            ? "Book and pay here, or continue to a seller's site."
+            : "Pyrius picks the lowest price and the seller. You finish on their site."
+      }
     >
       <div className="bk">
+        {inApp && ref && <InAppBooking offer={offer} params={ref.params} mode={inApp} />}
+        {inApp && <p className="bk__label ib__or">Or book with a seller</p>}
+        {inApp && !ready && !loading && !fail && (
+          <button className="btn btn--secondary btn--sm ib__sellers" onClick={findSellers}>
+            Compare sellers on Google Flights
+          </button>
+        )}
         {loading && (
           <div className="bk__loading" role="status" aria-live="polite">
             <p className="bk__status">{offer.returnPending && !ready?.changed ? "Finding the cheapest return flight and the best seller…" : "Finding the best seller…"}</p>
@@ -319,8 +342,8 @@ export function BookingDialog({ offer, open, onClose, onExpired, tab }: { offer:
         )}
 
         <p className="bk__fine">
-          Prices and availability come from Google Flights and are confirmed by the seller before you pay. Check that the flights on the seller&apos;s page match the ones above. Pyrius
-          doesn&apos;t sell tickets or take payment; the booking is between you and the seller.
+          Seller prices and availability come from Google Flights and are confirmed by the seller before you pay. Check that the flights on the seller&apos;s page match the ones above.
+          {inApp ? " Bookings with a seller are between you and them." : " Pyrius doesn't sell tickets or take payment; the booking is between you and the seller."}
         </p>
       </div>
     </Dialog>
